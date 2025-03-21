@@ -71,6 +71,8 @@ streamlit run frontend.py grpc
 http://127.0.0.1:8501
 ```
 
+Note: transfer speed for images can significantly boosted by resizing them before sending. This will usually not cause issues with the ai model, since most models need images of low input sizes like 224x224.
+
 ## Tests
 
 ```bash
