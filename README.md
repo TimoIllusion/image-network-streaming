@@ -93,6 +93,10 @@ docker build -f ./docker/Dockerfile -t aiserver:latest .
 docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all -p 5555:5555 aiserver:latest
 ```
 
+## Common Issues
+
+- camera not working and throwing errors -> close all open instances of streamlit in browser except one and reload it
+
 ## TODO
 
 - [x] Dockerize ai server
