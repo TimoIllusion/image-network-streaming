@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package aiapp;
+
+service AiDetectionService {
+  rpc Detect(FrameRequest) returns (DetectionResponse);
+}
+
+message FrameRequest {
+  bytes image = 1;
+}
+
+message DetectionResult {
+  // Define the structure based on your detection result requirements
+  // For example, if your detections include bounding boxes, classes, and scores:
+  repeated BoundingBox boxes = 1;
+  repeated string classes = 2;
+  repeated float scores = 3;
+}
+
+message BoundingBox {
+  float x1 = 1;
+  float y1 = 2;
+  float x2 = 3;
+  float y2 = 4;
+}
+
+message DetectionResponse {
+  repeated DetectionResult results = 1;
+}
