@@ -92,6 +92,7 @@ docker build -f ./docker/Dockerfile -t aiserver:latest .
 # runs imagezmq backend by default
 docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all -p 5555:5555 aiserver:latest
 ```
+
 ## TODO
 
 - [x] Dockerize ai server
