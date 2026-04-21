@@ -7,7 +7,7 @@ Result of experiments (latency from better to worse, for 1920x1080 images, using
 1. ImageZMQ (ca. 60-70 fps)
 2. ZeroMQ (ca. 25 fps)
 3. grpc (quite fast, but not very consistent, about 20-30 fps)
-4. FastAPI (very slow, around 2s or 0.5 fps)
+4. FastAPI/HTTP (very slow, around 2s or 0.5 fps)
 
 ## Setup
 
