@@ -98,3 +98,8 @@ docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all -p 5555:5555 aiser
 ## TODO
 
 - [x] Dockerize ai server
+
+## AI Assistance
+
+Development of this project was supported by AI, which provided code suggestions and troubleshooting help.
+
