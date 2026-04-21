@@ -11,19 +11,17 @@ Result of experiments (latency from better to worse, for 1920x1080 images, using
 
 ## Setup
 
+Requirements: Python 3.11 with pip and venv available. Using *uv* for easy and fast python env setup is recommended.
+
 ```bash
 git clone https://github.com/TimoIllusion/image-network-streaming.git
-
 cd image-network-streaming
-
-conda create -p ./.conda python=3.11 -y
-
-conda activate ./.conda
-
+python -m venv .venv
+source .venv/bin/activate
 pip install -e .
-
 ```
-Note: Install torch with the respective hardware acceleration, e.g. cuda to increase inference speed.
+
+>Note: Install torch with the respective hardware acceleration, e.g. CUDA to increase inference speed.
 
 ## Run
 
@@ -39,7 +37,7 @@ http://127.0.0.1:8501
 
 **Using ZMQ for communication**
 
-Note: The order of starting is important!
+>Note: The order of starting is important!
 
 ```bash
 python backend_zmq.py
@@ -51,7 +49,7 @@ http://127.0.0.1:8501
 
 **Using ImageZMQ for communication**
 
-Note: The order of starting is important!
+>Note: The order of starting is important!
 
 ```bash
 python backend_imagezmq.py
@@ -71,7 +69,7 @@ streamlit run frontend.py grpc
 http://127.0.0.1:8501
 ```
 
-Note: transfer speed for images can significantly boosted by resizing them before sending. This will usually not cause issues with the ai model, since most models need images of low input sizes like 224x224.
+>Note: transfer speed for images can significantly boosted by resizing them before sending. This will usually not cause issues with the ai model, since most models need images of low input sizes like 224x224.
 
 ## Tests
 
@@ -82,7 +80,7 @@ pip install -e .[test]
 ```bash
 pytest tests
 ```
-## Build Docker
+## Docker
 
 ```bash
 docker build -f ./docker/Dockerfile -t aiserver:latest .
