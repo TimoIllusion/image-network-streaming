@@ -4,6 +4,7 @@ import time
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.concurrency import run_in_threadpool
 
 
 from ultralytics import YOLO
@@ -26,42 +27,38 @@ async def detect(file: UploadFile = File(...)):
     t0 = time.time()
 
     contents = await file.read()
-    image = Image.open(io.BytesIO(contents))
+    image = Image.open(io.BytesIO(contents)).convert("RGB")
     image = np.array(image)
-
-    # Ensure image is in RGB format if it's a PNG with an alpha channel
-    if image.shape[-1] == 4:
-        image = image[..., :3]
 
     t1 = time.time()
 
     # Perform inference
-    results: List[Results] = model(image)
-
-    logger.info(results)
+    # YOLO inference is CPU/GPU bound and synchronous; run it off the event loop so
+    # concurrent requests don't stall behind one long inference.
+    results: List[Results] = await run_in_threadpool(model, image)
 
     t2 = time.time()
 
     # Process results list
     results_prepared_for_transmission = []
     for result in results:
-        result_json_str = result.tojson()
-        logger.info(result_json_str)
+        # Ultralytics Results API uses to_json() (not tojson()).
+        result_json_str = result.to_json()
 
         # convert back to dict object
         result_py = json.loads(result_json_str)
-        logger.info(result_py)
 
         results_prepared_for_transmission.append(result_py)
 
-    logger.info(results_prepared_for_transmission)
-
     t3 = time.time()
 
-    logger.info(f"Total time: {t3 - t0}")
-    logger.info(f"Read time: {t1 - t0}")
-    logger.info(f"Inference time: {t2 - t1}")
-    logger.info(f"Results processing time: {t3 - t2}")
+    logger.info(
+        "detect timings total=%.3fs read=%.3fs infer=%.3fs post=%.3fs",
+        (t3 - t0),
+        (t1 - t0),
+        (t2 - t1),
+        (t3 - t2),
+    )
 
     return JSONResponse(
         content={"batched_detections": results_prepared_for_transmission}
