@@ -1,6 +1,6 @@
 # image-network-streaming
 
-A test for image transmission and inference response using an AI inference server with multiple communication systems: FastAPI, ZeroMQ (ZMQ), ImageZMQ, grpc.
+A benchmark for image transmission and inference response using an AI inference server with multiple communication systems: FastAPI, ZeroMQ (ZMQ), ImageZMQ, grpc.
 
 Result of experiments (latency from better to worse, for 1920x1080 images, using NVIDIA RTX 4090 and AMD 7800X3D):
 
