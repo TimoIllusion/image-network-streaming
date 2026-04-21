@@ -12,6 +12,8 @@ class FastAPIBackendInterface(BackendInterface):
 
     def __init__(self):
         self.server_url = "http://localhost:8008/detect/"
+        # Reuse TCP connections across frames (avoids per-frame handshake/slowdown).
+        self._session = requests.Session()
 
     def send_frame_to_ai_server(self, frame):
         try:
@@ -27,7 +29,7 @@ class FastAPIBackendInterface(BackendInterface):
             files = {
                 "file": ("frame.jpg", io.BytesIO(encoded_image.tobytes()), "image/jpeg")
             }
-            response = requests.post(self.server_url, files=files)
+            response = self._session.post(self.server_url, files=files, timeout=(2, 30))
             response_time = time.time() - t1
 
             logger.info(f"send_frame_to_server total time: {time.time() - t0}")
@@ -49,6 +51,12 @@ class FastAPIBackendInterface(BackendInterface):
         except requests.exceptions.ConnectionError as e:
             logger.error(f"Failed to connect to ai backend: {e}")
             return None
+        except requests.exceptions.Timeout as e:
+            logger.error(f"Timeout talking to ai backend: {e}")
+            return None
 
     def close(self):
-        pass
+        try:
+            self._session.close()
+        except Exception:
+            logger.exception("Failed to close FastAPI backend session")
