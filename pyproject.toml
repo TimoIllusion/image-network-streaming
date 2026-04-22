@@ -20,9 +20,17 @@ dynamic = ["dependencies"]
 
 [project.optional-dependencies]
 test = [
+  "flake8>=6,<8",
+  "numpy>=1.24,<3",
+  "opencv-python-headless>=4.8,<5",
+  "pillow>=10,<12",
   "pytest>=7,<8",
   "pytest-asyncio>=0.21,<1",
   "httpx>=0.27,<1",
+]
+dev = [
+  "pre-commit>=3.7,<4",
+  "ruff>=0.6,<1",
 ]
 
 [project.urls]
@@ -37,4 +45,25 @@ include = ["inference_streaming_benchmark*"]
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
+
+[tool.ruff]
+line-length = 128
+target-version = "py310"
+extend-exclude = [
+  ".venv",
+  "Ultralytics",
+  "**/*_pb2.py",
+  "**/*_pb2_grpc.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E203"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**.py" = ["E402"]
+"inference_streaming_benchmark/backend/fastapi/ai_server.py" = ["B008"]
+
+[tool.ruff.format]
+line-ending = "auto"
 
