@@ -1,13 +1,14 @@
-import zmq
+import io
 import json
 import time
-from ultralytics import YOLO
+
 import numpy as np
+import zmq
 from PIL import Image
-import io
 
 # Initialize logging
 from inference_streaming_benchmark.logging import logger
+from ultralytics import YOLO
 
 # Load the YOLO model
 model = YOLO("yolov8n.pt")

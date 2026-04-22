@@ -1,14 +1,13 @@
-import time
 import json
+import time
 
 import imagezmq
 
-from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.backend.api import BackendInterface
+from inference_streaming_benchmark.logging import logger
 
 
 class ImageZMQBackendInterface(BackendInterface):
-
     def __init__(self):
         self.sender = imagezmq.ImageSender(connect_to="tcp://localhost:5555")
         self.lock = False
@@ -30,9 +29,7 @@ class ImageZMQBackendInterface(BackendInterface):
         # logger.info(response)
 
         detection_results_batched = response["batched_detections"]
-        detection_results_single = detection_results_batched[
-            0
-        ]  # batch size is always 1
+        detection_results_single = detection_results_batched[0]  # batch size is always 1
 
         t3 = time.time()
 

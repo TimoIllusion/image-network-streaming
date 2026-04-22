@@ -5,7 +5,7 @@ import grpc
 import inference_streaming_benchmark.backend.grpc.ai_server_pb2 as ai__server__pb2
 
 
-class AiDetectionServiceStub(object):
+class AiDetectionServiceStub:
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -21,7 +21,7 @@ class AiDetectionServiceStub(object):
         )
 
 
-class AiDetectionServiceServicer(object):
+class AiDetectionServiceServicer:
     """Missing associated documentation comment in .proto file."""
 
     def Detect(self, request, context):
@@ -46,7 +46,7 @@ def add_AiDetectionServiceServicer_to_server(servicer, server):
 
 
 # This class is part of an EXPERIMENTAL API.
-class AiDetectionService(object):
+class AiDetectionService:
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod

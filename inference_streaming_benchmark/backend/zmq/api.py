@@ -3,12 +3,11 @@ import time
 import cv2
 import zmq
 
-from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.backend.api import BackendInterface
+from inference_streaming_benchmark.logging import logger
 
 
 class ZMQBackendInterface(BackendInterface):
-
     def __init__(self):
         self.server_url = "tcp://localhost:5555"
         self.context = zmq.Context()
@@ -31,9 +30,7 @@ class ZMQBackendInterface(BackendInterface):
         response_data = self.socket.recv_json()
 
         detection_results_batched = response_data["batched_detections"]
-        detection_results_single = detection_results_batched[
-            0
-        ]  # batch size is always 1
+        detection_results_single = detection_results_batched[0]  # batch size is always 1
 
         t3 = time.time()
 

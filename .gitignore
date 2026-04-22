@@ -1,9 +1,16 @@
 # CUSTOM
 
 .conda
+Thumbs.db
+.DS_Store
+
+*.pt
 yolov8n.pt
 result.png
-Ultralytics
+Ultralytics/
+
+.idea/
+.vscode/
 
 
 
@@ -59,6 +66,9 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+
+# Ruff
+.ruff_cache/
 
 # Translations
 *.mo

@@ -1,8 +1,7 @@
-from typing import List
 import threading
 
-import numpy as np
 import cv2
+import numpy as np
 
 # Create a lock to manage access to the camera
 lock = threading.Lock()
@@ -22,14 +21,13 @@ def generate_frames():
         camera.release()
 
 
-def draw_detections(img: np.ndarray, detections: List[dict]):
+def draw_detections(img: np.ndarray, detections: list[dict]):
 
     h, w, _ = img.shape
 
     scale = w / 640
 
     for obj_detection in detections:
-
         cv2.rectangle(
             img,
             (int(obj_detection["box"]["x1"]), int(obj_detection["box"]["y1"])),
@@ -57,14 +55,14 @@ def draw_detections(img: np.ndarray, detections: List[dict]):
 
 
 def draw_fps(img: np.ndarray, fps: float):
-    
+
     h, w, _ = img.shape
-    
+
     scale = w / 640
-    
+
     x = 10
     y = int(40 * scale)
-    
+
     cv2.putText(
         img,
         f"FPS: {fps:0.2f}",

@@ -1,6 +1,7 @@
-import pytest
-import json
 import io
+import json
+
+import pytest
 
 fastapi = pytest.importorskip("fastapi")
 pytest.importorskip("PIL")

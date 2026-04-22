@@ -1,31 +1,24 @@
 import time
 from concurrent import futures
-from typing import List
 
 import grpc
-
 import numpy as np
-
-from PIL import Image
-import io
-from ultralytics import YOLO
 from ultralytics.engine.results import Results
 
 from inference_streaming_benchmark.backend.grpc.ai_server_pb2 import (
+    BoundingBox,
     DetectionResponse,
     DetectionResult,
-    BoundingBox,
 )
 from inference_streaming_benchmark.backend.grpc.ai_server_pb2_grpc import (
     AiDetectionServiceServicer,
     add_AiDetectionServiceServicer_to_server,
 )
-
 from inference_streaming_benchmark.logging import logger
+from ultralytics import YOLO
 
 
 class AiDetectionService(AiDetectionServiceServicer):
-
     def __init__(self):
         # Load your YOLO model here
         self.model = YOLO("yolov8n.pt")
@@ -48,7 +41,7 @@ class AiDetectionService(AiDetectionServiceServicer):
 
         t1 = time.time()
         # Perform inference using YOLO
-        results: List[Results] = self.model(image)
+        results: list[Results] = self.model(image)
         t2 = time.time()
 
         # Prepare the response
@@ -56,7 +49,6 @@ class AiDetectionService(AiDetectionServiceServicer):
 
         # Process results list
         for result in results:
-
             boxes = result.boxes.xyxy.cpu().numpy()
             confs = result.boxes.conf.cpu().numpy()
             classes = result.boxes.cls.cpu().numpy()
@@ -64,7 +56,7 @@ class AiDetectionService(AiDetectionServiceServicer):
             boxes_converted = []
             confs_converted = []
             classes_converted = []
-            for box, conf, cl in zip(boxes, confs, classes):
+            for box, conf, cl in zip(boxes, confs, classes, strict=False):
                 x1, y1, x2, y2 = box
 
                 bounding_box_proto = BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2)
@@ -73,9 +65,7 @@ class AiDetectionService(AiDetectionServiceServicer):
                 classes_converted.append(str(cl))
                 confs_converted.append(conf)
 
-            detection_result = DetectionResult(
-                boxes=boxes_converted, classes=classes_converted, scores=confs_converted
-            )
+            detection_result = DetectionResult(boxes=boxes_converted, classes=classes_converted, scores=confs_converted)
 
             detection_results.append(detection_result)
 

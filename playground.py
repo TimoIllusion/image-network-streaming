@@ -1,6 +1,6 @@
-from inference_streaming_benchmark.backend.grpc.api import GRPCBackendInterface
-
 import cv2
+
+from inference_streaming_benchmark.backend.grpc.api import GRPCBackendInterface
 
 img = cv2.imread(r"resources\example_dall_e.png")
 

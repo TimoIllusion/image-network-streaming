@@ -1,24 +1,38 @@
-from typing import List
+from __future__ import annotations
+
+import io
 import json
 import time
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import JSONResponse
-from fastapi.concurrency import run_in_threadpool
-
-
-from ultralytics import YOLO
-from ultralytics.engine.results import Results
-import io
-from PIL import Image
 import numpy as np
+from fastapi import FastAPI, File, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
+from PIL import Image
 
 from inference_streaming_benchmark.logging import logger
 
+if TYPE_CHECKING:
+    from ultralytics.engine.results import Results
+
 app = FastAPI()
 
-# Load the model (specify the path to your YOLOv8 model or use the default one)
-model = YOLO("yolov8n.pt")
+# Model is loaded lazily to keep imports lightweight (e.g. in CI/tests) and to
+# avoid downloading weights at import time.
+model: Callable[[np.ndarray], list[Results]] | None = None
+
+
+def _get_or_load_model():
+    global model
+    if model is not None:
+        return model
+
+    from ultralytics import YOLO  # imported lazily on purpose
+
+    model = YOLO("yolov8n.pt")
+    return model
 
 
 @app.post("/detect/")
@@ -35,7 +49,8 @@ async def detect(file: UploadFile = File(...)):
     # Perform inference
     # YOLO inference is CPU/GPU bound and synchronous; run it off the event loop so
     # concurrent requests don't stall behind one long inference.
-    results: List[Results] = await run_in_threadpool(model, image)
+    _model = _get_or_load_model()
+    results: list[Results] = await run_in_threadpool(_model, image)
 
     t2 = time.time()
 
@@ -60,6 +75,4 @@ async def detect(file: UploadFile = File(...)):
         (t3 - t2),
     )
 
-    return JSONResponse(
-        content={"batched_detections": results_prepared_for_transmission}
-    )
+    return JSONResponse(content={"batched_detections": results_prepared_for_transmission})

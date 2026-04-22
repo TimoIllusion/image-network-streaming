@@ -4,12 +4,11 @@ import time
 import cv2
 import requests
 
-from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.backend.api import BackendInterface
+from inference_streaming_benchmark.logging import logger
 
 
 class FastAPIBackendInterface(BackendInterface):
-
     def __init__(self):
         self.server_url = "http://localhost:8008/detect/"
         # Reuse TCP connections across frames (avoids per-frame handshake/slowdown).
@@ -17,7 +16,6 @@ class FastAPIBackendInterface(BackendInterface):
 
     def send_frame_to_ai_server(self, frame):
         try:
-
             t0 = time.time()
 
             _, encoded_image = cv2.imencode(".jpg", frame)
@@ -26,9 +24,7 @@ class FastAPIBackendInterface(BackendInterface):
 
             t1 = time.time()
 
-            files = {
-                "file": ("frame.jpg", io.BytesIO(encoded_image.tobytes()), "image/jpeg")
-            }
+            files = {"file": ("frame.jpg", io.BytesIO(encoded_image.tobytes()), "image/jpeg")}
             response = self._session.post(self.server_url, files=files, timeout=(2, 30))
             response_time = time.time() - t1
 
@@ -40,9 +36,7 @@ class FastAPIBackendInterface(BackendInterface):
                 response_data = response.json()
 
                 detection_results_batched = response_data["batched_detections"]
-                detection_results_single = detection_results_batched[
-                    0
-                ]  # batch size is always 1
+                detection_results_single = detection_results_batched[0]  # batch size is always 1
 
                 return detection_results_single
             else:

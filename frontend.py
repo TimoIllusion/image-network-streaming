@@ -1,17 +1,16 @@
-import streamlit as st
-
 import os
+
+import streamlit as st
 
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 
-import time
-import cv2
 import sys
+import time
 
+import cv2
 
-from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.frontend.media import draw_detections, draw_fps
-
+from inference_streaming_benchmark.logging import logger
 
 # construct the argument parser and parse the arguments
 backend = sys.argv[1]
@@ -82,7 +81,6 @@ else:
     cap = st.session_state["cap"]
 
 while True:
-
     ret, frame = cap.read()
     if not ret:
         st.error("Failed to capture frame")
@@ -90,11 +88,8 @@ while True:
 
     # Send frame to server for object detection
     if infer:
-
         t0 = time.time()
-        detection_results_single = st.session_state[
-            "backend_interface"
-        ].send_frame_to_ai_server(frame)
+        detection_results_single = st.session_state["backend_interface"].send_frame_to_ai_server(frame)
         inference_duration = time.time() - t0
         fps = 1 / inference_duration
 

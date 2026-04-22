@@ -1,21 +1,16 @@
 import time
-from typing import List
 
 import grpc
-import cv2
 
 from inference_streaming_benchmark.backend.api import BackendInterface
-
 from inference_streaming_benchmark.backend.grpc.ai_server_pb2 import FrameRequest
 from inference_streaming_benchmark.backend.grpc.ai_server_pb2_grpc import (
     AiDetectionServiceStub,
 )
-
 from inference_streaming_benchmark.logging import logger
 
 
 class GRPCBackendInterface(BackendInterface):
-
     def __init__(self):
         options = [
             ("grpc.max_send_message_length", 50 * 1024 * 1024),  # 50 MB
@@ -24,7 +19,7 @@ class GRPCBackendInterface(BackendInterface):
         self.channel = grpc.insecure_channel("localhost:50051", options=options)
         self.stub = AiDetectionServiceStub(self.channel)
 
-    def send_frame_to_ai_server(self, frame) -> List[dict]:
+    def send_frame_to_ai_server(self, frame) -> list[dict]:
         t0 = time.time()
         # _, encoded_image = cv2.imencode(".jpg", frame)
         # frame_bytes = encoded_image.tobytes()
@@ -43,8 +38,8 @@ class GRPCBackendInterface(BackendInterface):
                 detection_results_single.boxes,
                 detection_results_single.scores,
                 detection_results_single.classes,
+                strict=False,
             ):
-
                 detection = {
                     "box": {"x1": box.x1, "y1": box.y1, "x2": box.x2, "y2": box.y2},
                     "confidence": conf,
