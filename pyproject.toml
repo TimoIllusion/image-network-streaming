@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inference-streaming-benchmark"
+version = "0.1.0"
+description = "A test for image transmission via multiple communication systems: FastAPI, ZeroMQ (ZMQ), ImageZMQ, grpc."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Timo Leitritz", email = "42964574+TimoIllusion@users.noreply.github.com" },
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=7,<8",
+  "pytest-asyncio>=0.21,<1",
+  "httpx>=0.27,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/TimoIllusion/inference-streaming-benchmark"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["inference_streaming_benchmark*"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
