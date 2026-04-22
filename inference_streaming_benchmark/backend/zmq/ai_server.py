@@ -1,19 +1,28 @@
-import imagezmq
+import zmq
 import json
 import time
 from ultralytics import YOLO
+import numpy as np
+from PIL import Image
+import io
 
 # Initialize logging
-from image_network_streaming.logging import logger
+from inference_streaming_benchmark.logging import logger
 
 # Load the YOLO model
 model = YOLO("yolov8n.pt")
 
 
-def detect(image):
+def detect(image_data):
     """
     Perform object detection on the image data.
     """
+    image = Image.open(io.BytesIO(image_data))
+    image = np.array(image)
+
+    # Ensure image is in RGB format if it's a PNG with an alpha channel
+    if image.shape[-1] == 4:
+        image = image[..., :3]
 
     # Perform inference
     results = model(image)
@@ -30,20 +39,22 @@ def detect(image):
 
 
 def main():
-    image_hub = imagezmq.ImageHub(open_port="tcp://0.0.0.0:5555")
+    context = zmq.Context()
+    socket = context.socket(zmq.REP)  # REP socket for reply
+    socket.bind("tcp://*:5555")
 
-    logger.info("ImageZMQ HUB initialized.")
+    logger.info("ZMQ context and socket initialized.")
 
     logger.info("Loop for receiving images and sending back detections started.")
 
     while True:
         logger.info("Waiting for image data...")
         #  Wait for next request from client
-        text, image = image_hub.recv_image()
+        image_data = socket.recv()
 
         t0 = time.time()
 
-        detections = detect(image)
+        detections = detect(image_data)
 
         t1 = time.time()
 
@@ -52,6 +63,4 @@ def main():
 
         #  Send reply back to client
         logger.info("Sending back detections...")
-
-        detections_json_str = json.dumps({"batched_detections": detections})
-        image_hub.send_reply(bytes(detections_json_str, "utf-8"))
+        socket.send_json({"batched_detections": detections})

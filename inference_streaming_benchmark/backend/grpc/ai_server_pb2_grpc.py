@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import image_network_streaming.backend.grpc.ai_server_pb2 as ai__server__pb2
+import inference_streaming_benchmark.backend.grpc.ai_server_pb2 as ai__server__pb2
 
 
 class AiDetectionServiceStub(object):

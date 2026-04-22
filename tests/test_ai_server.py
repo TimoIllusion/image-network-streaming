@@ -1,9 +1,9 @@
 import pytest
 from httpx import AsyncClient
-from image_network_streaming.backend.fastapi.ai_server import (
+from inference_streaming_benchmark.backend.fastapi.ai_server import (
     app,
 )  # Import the FastAPI instance from your app module
-from image_network_streaming.logging import logger
+from inference_streaming_benchmark.logging import logger
 
 
 @pytest.mark.asyncio

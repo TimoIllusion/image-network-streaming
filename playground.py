@@ -1,4 +1,4 @@
-from image_network_streaming.backend.grpc.api import GRPCBackendInterface
+from inference_streaming_benchmark.backend.grpc.api import GRPCBackendInterface
 
 import cv2
 

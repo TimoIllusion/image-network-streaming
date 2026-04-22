@@ -4,14 +4,14 @@ from typing import List
 import grpc
 import cv2
 
-from image_network_streaming.backend.api import BackendInterface
+from inference_streaming_benchmark.backend.api import BackendInterface
 
-from image_network_streaming.backend.grpc.ai_server_pb2 import FrameRequest
-from image_network_streaming.backend.grpc.ai_server_pb2_grpc import (
+from inference_streaming_benchmark.backend.grpc.ai_server_pb2 import FrameRequest
+from inference_streaming_benchmark.backend.grpc.ai_server_pb2_grpc import (
     AiDetectionServiceStub,
 )
 
-from image_network_streaming.logging import logger
+from inference_streaming_benchmark.logging import logger
 
 
 class GRPCBackendInterface(BackendInterface):

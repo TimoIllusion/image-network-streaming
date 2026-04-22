@@ -13,7 +13,7 @@ import io
 from PIL import Image
 import numpy as np
 
-from image_network_streaming.logging import logger
+from inference_streaming_benchmark.logging import logger
 
 app = FastAPI()
 

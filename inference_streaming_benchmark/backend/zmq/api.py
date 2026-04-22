@@ -3,8 +3,8 @@ import time
 import cv2
 import zmq
 
-from image_network_streaming.logging import logger
-from image_network_streaming.backend.api import BackendInterface
+from inference_streaming_benchmark.logging import logger
+from inference_streaming_benchmark.backend.api import BackendInterface
 
 
 class ZMQBackendInterface(BackendInterface):

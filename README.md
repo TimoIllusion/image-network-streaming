@@ -1,4 +1,4 @@
-# image-network-streaming
+# inference-streaming-benchmark
 
 Comparison implementation for image transmission and inference response using an AI inference server with multiple communication systems: FastAPI, ZeroMQ (ZMQ), ImageZMQ, grpc.
 
@@ -14,8 +14,8 @@ Result of experiments (latency from better to worse, for 1920x1080 images, using
 Requirements: Python 3.11 with pip and venv available. Using *uv* for easy and fast python env setup is recommended.
 
 ```bash
-git clone https://github.com/TimoIllusion/image-network-streaming.git
-cd image-network-streaming
+git clone https://github.com/TimoIllusion/inference-streaming-benchmark.git
+cd inference-streaming-benchmark
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -83,12 +83,12 @@ pytest tests
 ## Docker
 
 ```bash
-docker build -f ./docker/Dockerfile -t aiserver:latest .
+docker build -f ./docker/Dockerfile -t inference-streaming-benchmark:latest .
 ```
 
 ```bash
 # runs imagezmq backend by default
-docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all -p 5555:5555 aiserver:latest
+docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all -p 5555:5555 inference-streaming-benchmark:latest
 ```
 
 ## Common Issues
