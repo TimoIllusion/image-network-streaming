@@ -11,17 +11,17 @@ import io
 from ultralytics import YOLO
 from ultralytics.engine.results import Results
 
-from image_network_streaming.backend.grpc.ai_server_pb2 import (
+from inference_streaming_benchmark.backend.grpc.ai_server_pb2 import (
     DetectionResponse,
     DetectionResult,
     BoundingBox,
 )
-from image_network_streaming.backend.grpc.ai_server_pb2_grpc import (
+from inference_streaming_benchmark.backend.grpc.ai_server_pb2_grpc import (
     AiDetectionServiceServicer,
     add_AiDetectionServiceServicer_to_server,
 )
 
-from image_network_streaming.logging import logger
+from inference_streaming_benchmark.logging import logger
 
 
 class AiDetectionService(AiDetectionServiceServicer):

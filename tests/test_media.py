@@ -1,4 +1,4 @@
-from image_network_streaming.frontend import media
+from inference_streaming_benchmark.frontend import media
 
 
 def test_media():

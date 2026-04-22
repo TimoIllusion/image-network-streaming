@@ -11,14 +11,14 @@ def load_requirements(filename="requirements.txt"):
 install_requires = load_requirements()
 
 setup(
-    name="image-network-streaming",
+    name="inference-streaming-benchmark",
     version="0.1.0",
     author="Timo Leitritz",
     author_email="42964574+TimoIllusion@users.noreply.github.com",
     description="A test for image transmission via multiple communication systems: FastAPI, ZeroMQ (ZMQ), ImageZMQ, grpc.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/TimoIllusion/image-network-streaming",
+    url="https://github.com/TimoIllusion/inference-streaming-benchmark",
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

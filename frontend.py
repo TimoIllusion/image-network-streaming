@@ -9,8 +9,8 @@ import cv2
 import sys
 
 
-from image_network_streaming.logging import logger
-from image_network_streaming.frontend.media import draw_detections, draw_fps
+from inference_streaming_benchmark.logging import logger
+from inference_streaming_benchmark.frontend.media import draw_detections, draw_fps
 
 
 # construct the argument parser and parse the arguments
@@ -45,21 +45,21 @@ if st.session_state["backend_interface"] is not None:
         pass
 else:
     if backend == "fastapi":
-        from image_network_streaming.backend.fastapi.api import FastAPIBackendInterface
+        from inference_streaming_benchmark.backend.fastapi.api import FastAPIBackendInterface
 
         backend_interface = FastAPIBackendInterface()
     elif backend == "zmq":
-        from image_network_streaming.backend.zmq.api import ZMQBackendInterface
+        from inference_streaming_benchmark.backend.zmq.api import ZMQBackendInterface
 
         backend_interface = ZMQBackendInterface()
     elif backend == "imagezmq":
-        from image_network_streaming.backend.imagezmq.api import (
+        from inference_streaming_benchmark.backend.imagezmq.api import (
             ImageZMQBackendInterface,
         )
 
         backend_interface = ImageZMQBackendInterface()
     elif backend == "grpc":
-        from image_network_streaming.backend.grpc.api import GRPCBackendInterface
+        from inference_streaming_benchmark.backend.grpc.api import GRPCBackendInterface
 
         backend_interface = GRPCBackendInterface()
     else:

@@ -3,6 +3,7 @@
 .conda
 yolov8n.pt
 result.png
+Ultralytics/settings.json
 
 
 
