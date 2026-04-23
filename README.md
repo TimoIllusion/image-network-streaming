@@ -2,12 +2,15 @@
 
 Comparison implementation for image transmission and inference response using an AI inference server with multiple communication systems: FastAPI, ZeroMQ (ZMQ), ImageZMQ, grpc.
 
-Result of experiments (latency from better to worse, for 1920x1080 images, using NVIDIA RTX 4090 and AMD 7800X3D):
+Results for 1920×1080 images on a MacBook Pro M2 Pro (YOLOv8n, MPS inference):
 
-1. ImageZMQ (ca. 60-70 fps)
-2. ZeroMQ (ca. 25 fps)
-3. grpc (quite fast, but not very consistent, about 20-30 fps)
-4. FastAPI/HTTP (very slow, around 2s or 0.5 fps)
+| Backend  | Transmission (ms) | Inference (ms) | Total (ms) |
+| -------- | ----------------- | -------------- | ---------- |
+| ImageZMQ | 3.4               | 19.8           | 23.1       |
+| ZMQ      | 8.3               | 19.6           | 32.9       |
+| gRPC     | 9.3               | 19.7           | 29.3       |
+| FastAPI  | 10.9              | 19.2           | 34.6       |
+
 
 ## Setup
 

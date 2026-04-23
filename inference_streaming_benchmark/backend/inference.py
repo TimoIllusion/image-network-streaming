@@ -17,10 +17,19 @@ def get_or_load_model():
     if _model is not None:
         return _model
 
+    import torch
     from ultralytics import YOLO  # lazy import — keeps CI imports lightweight
 
-    logger.info("Loading YOLO model...")
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+
+    logger.info(f"Loading YOLO model on device: {device}")
     _model = YOLO("yolov8n.pt")
+    _model.to(device)
     return _model
 
 
