@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import time
 
 import numpy as np
 from PIL import Image
@@ -27,6 +28,11 @@ def decode_jpeg_bytes(data: bytes) -> np.ndarray:
     return np.array(Image.open(io.BytesIO(data)).convert("RGB"))
 
 
-def run_inference(image: np.ndarray) -> list[dict]:
+def run_inference(image: np.ndarray) -> tuple[list[dict], dict]:
+    t0 = time.perf_counter()
     results = get_or_load_model()(image)
-    return [json.loads(result.to_json()) for result in results]
+    t1 = time.perf_counter()
+    out = [json.loads(result.to_json()) for result in results]
+    t2 = time.perf_counter()
+    timings = {"infer_ms": (t1 - t0) * 1000, "post_ms": (t2 - t1) * 1000}
+    return out, timings

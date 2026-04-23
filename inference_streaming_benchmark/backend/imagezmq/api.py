@@ -8,34 +8,27 @@ from inference_streaming_benchmark.logging import logger
 
 
 class ImageZMQBackendInterface(BackendInterface):
-    def __init__(self):
-        self.sender = imagezmq.ImageSender(connect_to="tcp://localhost:5555")
+    def __init__(self, host: str = "localhost", port: int = 5555):
+        self.sender = imagezmq.ImageSender(connect_to=f"tcp://{host}:{port}")
         self.lock = False
 
     def send_frame_to_ai_server(self, frame):
-        """Send a frame to the AI server and return the response."""
+        timings = {}
 
-        t1 = time.time()
+        t_total = time.perf_counter()
+        # ImageZMQ handles serialization internally; there's no client-side JPEG encode.
+        timings["encode_ms"] = 0.0
 
         self.lock = True
-        response_data_bytes_str = self.sender.send_image("frame", frame)
+        response_bytes = self.sender.send_image("frame", frame)
         self.lock = False
 
-        # logger.info(response_data_bytes_str)
+        timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
-        # Wait for the reply from the server
-        response = json.loads(response_data_bytes_str)
-
-        # logger.info(response)
-
-        detection_results_batched = response["batched_detections"]
-        detection_results_single = detection_results_batched[0]  # batch size is always 1
-
-        t3 = time.time()
-
-        logger.info(f"send_frame_to_server total time: {t3 - t1}")
-
-        return detection_results_single
+        response = json.loads(response_bytes)
+        timings.update(response.get("timings", {}))
+        detections_batched = response["batched_detections"]
+        return detections_batched[0], timings
 
     def close(self):
         while self.lock:

@@ -24,7 +24,7 @@ def test_end_to_end(monkeypatch):
     _fake_detections = [[{"box": {"x1": 10, "y1": 20, "x2": 30, "y2": 40}, "confidence": 0.99, "class": 0, "name": "object"}]]
 
     def _fake_run_inference(_image):
-        return _fake_detections
+        return _fake_detections, {"infer_ms": 1.0, "post_ms": 0.1}
 
     async def _run_sync(fn, *args, **kwargs):
         return fn(*args, **kwargs)

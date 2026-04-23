@@ -18,11 +18,12 @@ def main():
         logger.info("Waiting for image data...")
         image_data = socket.recv()
 
-        t0 = time.time()
+        t0 = time.perf_counter()
         image = decode_jpeg_bytes(image_data)
-        detections = run_inference(image)
-        t1 = time.time()
+        decode_ms = (time.perf_counter() - t0) * 1000
+        detections, timings = run_inference(image)
+        timings["decode_ms"] = decode_ms
 
-        logger.info(f"Detection time: {t1 - t0}")
+        logger.info(f"Detection time: {timings['infer_ms']:.1f}ms")
 
-        socket.send_json({"batched_detections": detections})
+        socket.send_json({"batched_detections": detections, "timings": timings})

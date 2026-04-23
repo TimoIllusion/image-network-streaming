@@ -25,6 +25,13 @@ message BoundingBox {
   float y2 = 4;
 }
 
+message DetectionTimings {
+  float decode_ms = 1;
+  float infer_ms = 2;
+  float post_ms = 3;
+}
+
 message DetectionResponse {
   repeated DetectionResult results = 1;
+  DetectionTimings timings = 2;
 }

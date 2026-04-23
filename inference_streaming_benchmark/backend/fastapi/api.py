@@ -9,45 +9,38 @@ from inference_streaming_benchmark.logging import logger
 
 
 class FastAPIBackendInterface(BackendInterface):
-    def __init__(self):
-        self.server_url = "http://localhost:8008/detect/"
+    def __init__(self, host: str = "localhost", port: int = 8008):
+        self.server_url = f"http://{host}:{port}/detect/"
         # Reuse TCP connections across frames (avoids per-frame handshake/slowdown).
         self._session = requests.Session()
 
     def send_frame_to_ai_server(self, frame):
+        timings = {}
         try:
-            t0 = time.time()
+            t_total = time.perf_counter()
 
+            t0 = time.perf_counter()
             _, encoded_image = cv2.imencode(".jpg", frame)
-
-            encoding_time = time.time() - t0
-
-            t1 = time.time()
+            timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
             files = {"file": ("frame.jpg", io.BytesIO(encoded_image.tobytes()), "image/jpeg")}
             response = self._session.post(self.server_url, files=files, timeout=(2, 30))
-            response_time = time.time() - t1
-
-            logger.info(f"send_frame_to_server total time: {time.time() - t0}")
-            logger.info(f"encoding time: {encoding_time}")
-            logger.info(f"response time: {response_time}")
+            timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
             if response.status_code == 200:
-                response_data = response.json()
+                data = response.json()
+                timings.update(data.get("timings", {}))
+                detections_batched = data["batched_detections"]
+                return detections_batched[0], timings  # batch size always 1
 
-                detection_results_batched = response_data["batched_detections"]
-                detection_results_single = detection_results_batched[0]  # batch size is always 1
-
-                return detection_results_single
-            else:
-                return None
+            return None, timings
 
         except requests.exceptions.ConnectionError as e:
             logger.error(f"Failed to connect to ai backend: {e}")
-            return None
+            return None, timings
         except requests.exceptions.Timeout as e:
             logger.error(f"Timeout talking to ai backend: {e}")
-            return None
+            return None, timings
 
     def close(self):
         try:
