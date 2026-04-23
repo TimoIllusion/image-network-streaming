@@ -7,8 +7,8 @@ from inference_streaming_benchmark.backend.inference import run_inference
 from inference_streaming_benchmark.logging import logger
 
 
-def main():
-    image_hub = imagezmq.ImageHub(open_port="tcp://0.0.0.0:5555")
+def main(port: int = 5555):
+    image_hub = imagezmq.ImageHub(open_port=f"tcp://0.0.0.0:{port}")
 
     logger.info("ImageZMQ HUB initialized.")
     logger.info("Loop for receiving images and sending back detections started.")
