@@ -4,6 +4,7 @@ import streamlit as st
 
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 
+import statistics
 import time
 
 import cv2
@@ -25,6 +26,7 @@ TRANSPORTS: dict[str, dict[str, int]] = {
 HOST = "localhost"
 HEALTH_TIMEOUT_S = 0.2
 STATUS_CACHE_TTL_S = 3.0
+STATS_REFRESH_EVERY_N_FRAMES = 5
 
 
 def _create_backend(transport: str, host: str, port: int) -> BackendInterface:
@@ -65,10 +67,47 @@ def _get_statuses() -> dict[str, bool]:
     return statuses
 
 
+def _build_stats_rows() -> list[dict]:
+    rows = []
+    for backend, data in st.session_state["bench_results"].items():
+        lats = data["latencies_ms"]
+        if not lats:
+            continue
+        duration_s = data["active_time_s"]
+        sorted_lats = sorted(lats)
+        p95_idx = min(int(len(lats) * 0.95), len(lats) - 1)
+        rows.append(
+            {
+                "Backend": backend,
+                "Frames": len(lats),
+                "Duration (s)": f"{duration_s:.1f}",
+                "FPS (mean)": f"{len(lats) / duration_s:.1f}" if duration_s > 0 else "-",
+                "Latency p50 (ms)": f"{statistics.median(lats):.1f}",
+                "Latency p95 (ms)": f"{sorted_lats[p95_idx]:.1f}",
+            }
+        )
+    return rows
+
+
+def _render_stats(placeholder) -> None:
+    rows = _build_stats_rows()
+    if rows:
+        placeholder.table(rows)
+    else:
+        placeholder.caption("No measurements yet — enable object detection to start collecting.")
+
+
 statuses = _get_statuses()
 option_labels = {name: f"{name} {'✅' if ok else '❌ offline'}" for name, ok in statuses.items()}
 
 selected = st.selectbox("Backend", list(TRANSPORTS.keys()), format_func=lambda n: option_labels[n])
+
+st.session_state.setdefault("bench_results", {})
+
+stats_placeholder = st.empty()
+if st.button("Clear results"):
+    st.session_state["bench_results"] = {}
+_render_stats(stats_placeholder)
 
 st.title(f"Webcam Object Detection using {selected.upper()}")
 infer = st.checkbox("Enable object detection")
@@ -127,8 +166,16 @@ while True:
     if infer:
         t0 = time.time()
         detection_results_single = st.session_state["backend_interface"].send_frame_to_ai_server(frame)
-        inference_duration = time.time() - t0
-        fps = 1 / inference_duration
+        latency_s = time.time() - t0
+        latency_ms = latency_s * 1000
+        fps = 1 / latency_s if latency_s > 0 else 0
+
+        bench = st.session_state["bench_results"].setdefault(selected, {"latencies_ms": [], "active_time_s": 0.0})
+        bench["latencies_ms"].append(latency_ms)
+        bench["active_time_s"] += latency_s
+
+        if len(bench["latencies_ms"]) % STATS_REFRESH_EVERY_N_FRAMES == 0:
+            _render_stats(stats_placeholder)
 
         if detection_results_single is not None:
             TEXT_MESSAGE.text(detection_results_single)
