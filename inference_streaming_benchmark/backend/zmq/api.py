@@ -4,7 +4,6 @@ import cv2
 import zmq
 
 from inference_streaming_benchmark.backend.api import BackendInterface
-from inference_streaming_benchmark.logging import logger
 
 
 class ZMQBackendInterface(BackendInterface):
@@ -15,31 +14,21 @@ class ZMQBackendInterface(BackendInterface):
         self.socket.connect(self.server_url)
 
     def send_frame_to_ai_server(self, frame):
-        """Send a frame to the AI server and return the response."""
+        timings = {}
 
-        t0 = time.time()
+        t_total = time.perf_counter()
 
+        t0 = time.perf_counter()
         _, buffer = cv2.imencode(".jpg", frame)
+        timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
-        t1 = time.time()
         self.socket.send(buffer)
-
-        t2 = time.time()
-
-        # Wait for the reply from the server
         response_data = self.socket.recv_json()
+        timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
-        detection_results_batched = response_data["batched_detections"]
-        detection_results_single = detection_results_batched[0]  # batch size is always 1
-
-        t3 = time.time()
-
-        logger.info(f"send_frame_to_server total time: {t3 - t0}")
-        logger.info(f"encoding time: {t1 - t0}")
-        logger.info(f"send time: {t2 - t1}")
-        logger.info(f"receive time: {t3 - t2}")
-
-        return detection_results_single
+        timings.update(response_data.get("timings", {}))
+        detections_batched = response_data["batched_detections"]
+        return detections_batched[0], timings
 
     def close(self):
         self.socket.close()

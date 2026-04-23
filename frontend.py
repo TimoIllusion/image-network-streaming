@@ -28,6 +28,9 @@ HEALTH_TIMEOUT_S = 0.2
 STATUS_CACHE_TTL_S = 3.0
 STATS_REFRESH_EVERY_N_FRAMES = 5
 
+# Columns we collect per frame and show as medians in the stats table.
+TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "total_ms")
+
 
 def _create_backend(transport: str, host: str, port: int) -> BackendInterface:
     if transport == "fastapi":
@@ -67,25 +70,38 @@ def _get_statuses() -> dict[str, bool]:
     return statuses
 
 
+def _record_timing(backend: str, timings: dict) -> None:
+    """Accumulate a single frame's timings (ms) into the per-backend session store."""
+    # Derived: comms = total - encode - (server-side decode + infer + post)
+    server_ms = timings.get("decode_ms", 0.0) + timings.get("infer_ms", 0.0) + timings.get("post_ms", 0.0)
+    comms_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("encode_ms", 0.0) - server_ms)
+    timings = {**timings, "comms_ms": comms_ms}
+
+    bench = st.session_state["bench_results"].setdefault(backend, {"active_time_s": 0.0, **{col: [] for col in TIMING_COLUMNS}})
+    for col in TIMING_COLUMNS:
+        if col in timings:
+            bench[col].append(timings[col])
+    bench["active_time_s"] += timings.get("total_ms", 0.0) / 1000
+
+
 def _build_stats_rows() -> list[dict]:
     rows = []
     for backend, data in st.session_state["bench_results"].items():
-        lats = data["latencies_ms"]
-        if not lats:
+        totals = data["total_ms"]
+        if not totals:
             continue
         duration_s = data["active_time_s"]
-        sorted_lats = sorted(lats)
-        p95_idx = min(int(len(lats) * 0.95), len(lats) - 1)
-        rows.append(
-            {
-                "Backend": backend,
-                "Frames": len(lats),
-                "Duration (s)": f"{duration_s:.1f}",
-                "FPS (mean)": f"{len(lats) / duration_s:.1f}" if duration_s > 0 else "-",
-                "Latency p50 (ms)": f"{statistics.median(lats):.1f}",
-                "Latency p95 (ms)": f"{sorted_lats[p95_idx]:.1f}",
-            }
-        )
+        row = {
+            "Backend": backend,
+            "Frames": len(totals),
+            "Duration (s)": f"{duration_s:.1f}",
+            "FPS": f"{len(totals) / duration_s:.1f}" if duration_s > 0 else "-",
+        }
+        # Median (p50) per column — a single representative number per timing.
+        for col in TIMING_COLUMNS:
+            samples = data[col]
+            row[col.replace("_ms", " (ms)")] = f"{statistics.median(samples):.1f}" if samples else "-"
+        rows.append(row)
     return rows
 
 
@@ -97,20 +113,23 @@ def _render_stats(placeholder) -> None:
         placeholder.caption("No measurements yet — enable object detection to start collecting.")
 
 
+# --- Page layout ---
+
+st.session_state.setdefault("bench_results", {})
 statuses = _get_statuses()
 option_labels = {name: f"{name} {'✅' if ok else '❌ offline'}" for name, ok in statuses.items()}
 
-selected = st.selectbox("Backend", list(TRANSPORTS.keys()), format_func=lambda n: option_labels[n])
+# Title first, then controls, then stats, then video.
+st.title("Webcam Object Detection")
 
-st.session_state.setdefault("bench_results", {})
+selected = st.selectbox("Backend", list(TRANSPORTS.keys()), format_func=lambda n: option_labels[n])
+infer = st.checkbox("Enable object detection")
 
 stats_placeholder = st.empty()
 if st.button("Clear results"):
     st.session_state["bench_results"] = {}
 _render_stats(stats_placeholder)
 
-st.title(f"Webcam Object Detection using {selected.upper()}")
-infer = st.checkbox("Enable object detection")
 FRAME_WINDOW = st.image([])
 TEXT_MESSAGE = st.empty()
 
@@ -164,17 +183,12 @@ while True:
         continue
 
     if infer:
-        t0 = time.time()
-        detection_results_single = st.session_state["backend_interface"].send_frame_to_ai_server(frame)
-        latency_s = time.time() - t0
-        latency_ms = latency_s * 1000
-        fps = 1 / latency_s if latency_s > 0 else 0
+        detection_results_single, timings = st.session_state["backend_interface"].send_frame_to_ai_server(frame)
+        _record_timing(selected, timings)
 
-        bench = st.session_state["bench_results"].setdefault(selected, {"latencies_ms": [], "active_time_s": 0.0})
-        bench["latencies_ms"].append(latency_ms)
-        bench["active_time_s"] += latency_s
+        fps = 1000 / timings["total_ms"] if timings.get("total_ms", 0) > 0 else 0
 
-        if len(bench["latencies_ms"]) % STATS_REFRESH_EVERY_N_FRAMES == 0:
+        if len(st.session_state["bench_results"][selected]["total_ms"]) % STATS_REFRESH_EVERY_N_FRAMES == 0:
             _render_stats(stats_placeholder)
 
         if detection_results_single is not None:
