@@ -1,5 +1,4 @@
 import io
-import json
 
 import pytest
 
@@ -17,39 +16,24 @@ def test_end_to_end(monkeypatch):
     Deterministic end-to-end test:
     - No filesystem resources required
     - No webcam required
-    - No Ultralytics weights download / GPU required (model is stubbed)
+    - No Ultralytics weights download / GPU required (inference is stubbed)
     """
 
-    # Import the module (not just app) so we can monkeypatch its globals.
     import inference_streaming_benchmark.backend.fastapi.ai_server as ai_server
 
-    class _FakeResult:
-        def to_json(self) -> str:
-            # Ultralytics returns a JSON string; we emulate a minimal structure
-            # compatible with frontend drawing code.
-            return json.dumps(
-                [
-                    {
-                        "box": {"x1": 10, "y1": 20, "x2": 30, "y2": 40},
-                        "confidence": 0.99,
-                        "class": 0,
-                        "name": "object",
-                    }
-                ]
-            )
+    _fake_detections = [[{"box": {"x1": 10, "y1": 20, "x2": 30, "y2": 40}, "confidence": 0.99, "class": 0, "name": "object"}]]
 
-    def _fake_model(_image):
-        return [_FakeResult()]
+    def _fake_run_inference(_image):
+        return _fake_detections
 
     async def _run_sync(fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
-    monkeypatch.setattr(ai_server, "model", _fake_model)
+    monkeypatch.setattr(ai_server, "run_inference", _fake_run_inference)
     monkeypatch.setattr(ai_server, "run_in_threadpool", _run_sync)
 
     client = TestClient(app)
 
-    # Create a tiny deterministic image in-memory.
     from PIL import Image
 
     image = Image.new("RGB", (64, 64), color=(128, 64, 32))
