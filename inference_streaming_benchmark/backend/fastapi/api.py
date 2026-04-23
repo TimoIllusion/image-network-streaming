@@ -9,8 +9,8 @@ from inference_streaming_benchmark.logging import logger
 
 
 class FastAPIBackendInterface(BackendInterface):
-    def __init__(self):
-        self.server_url = "http://localhost:8008/detect/"
+    def __init__(self, host: str = "localhost", port: int = 8008):
+        self.server_url = f"http://{host}:{port}/detect/"
         # Reuse TCP connections across frames (avoids per-frame handshake/slowdown).
         self._session = requests.Session()
 

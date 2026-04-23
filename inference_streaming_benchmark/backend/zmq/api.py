@@ -8,8 +8,8 @@ from inference_streaming_benchmark.logging import logger
 
 
 class ZMQBackendInterface(BackendInterface):
-    def __init__(self):
-        self.server_url = "tcp://localhost:5555"
+    def __init__(self, host: str = "localhost", port: int = 5555):
+        self.server_url = f"tcp://{host}:{port}"
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
         self.socket.connect(self.server_url)

@@ -11,12 +11,12 @@ from inference_streaming_benchmark.logging import logger
 
 
 class GRPCBackendInterface(BackendInterface):
-    def __init__(self):
+    def __init__(self, host: str = "localhost", port: int = 50051):
         options = [
             ("grpc.max_send_message_length", 50 * 1024 * 1024),  # 50 MB
             ("grpc.max_receive_message_length", 50 * 1024 * 1024),  # 50 MB
         ]
-        self.channel = grpc.insecure_channel("localhost:50051", options=options)
+        self.channel = grpc.insecure_channel(f"{host}:{port}", options=options)
         self.stub = AiDetectionServiceStub(self.channel)
 
     def send_frame_to_ai_server(self, frame) -> list[dict]:

@@ -25,6 +25,8 @@ pip install -e .
 
 ## Run
 
+>Note: Each backend also starts a small HTTP sidecar on port 9000 so the frontend can auto-discover which transport is running. The frontend defaults to `http://localhost:9000`; edit the input field in the UI to point at a different host.
+
 **Using FastAPI for communication**
 
 >Note: The order of starting is important!

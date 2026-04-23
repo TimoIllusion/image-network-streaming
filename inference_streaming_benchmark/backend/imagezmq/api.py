@@ -8,8 +8,8 @@ from inference_streaming_benchmark.logging import logger
 
 
 class ImageZMQBackendInterface(BackendInterface):
-    def __init__(self):
-        self.sender = imagezmq.ImageSender(connect_to="tcp://localhost:5555")
+    def __init__(self, host: str = "localhost", port: int = 5555):
+        self.sender = imagezmq.ImageSender(connect_to=f"tcp://{host}:{port}")
         self.lock = False
 
     def send_frame_to_ai_server(self, frame):
