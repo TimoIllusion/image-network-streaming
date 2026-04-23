@@ -11,7 +11,7 @@ Result of experiments (latency from better to worse, for 1920x1080 images, using
 
 ## Setup
 
-Requirements: Python 3.11 with pip and venv available. Using *uv* for easy and fast python env setup is recommended.
+Requirements: Python 3.10+ with pip and venv available. Using *uv* for easy and fast python env setup is recommended.
 
 ```bash
 git clone https://github.com/TimoIllusion/inference-streaming-benchmark.git
@@ -26,6 +26,8 @@ pip install -e .
 ## Run
 
 **Using FastAPI for communication**
+
+>Note: The order of starting is important!
 
 ```bash
 python backend_fastapi.py
@@ -61,6 +63,8 @@ http://127.0.0.1:8501
 
 **Using GRPC for communication**
 
+>Note: The order of starting is important!
+
 ```bash
 python backend_grpc.py
 
@@ -69,12 +73,12 @@ streamlit run frontend.py grpc
 http://127.0.0.1:8501
 ```
 
->Note: transfer speed for images can significantly boosted by resizing them before sending. This will usually not cause issues with the ai model, since most models need images of low input sizes like 224x224.
+>Note: transfer speed for images can be significantly boosted by resizing them before sending. This will usually not cause issues with the ai model, since most models need images of low input sizes like 224x224.
 
 ## Tests
 
 ```bash
-pip install -e .[test]
+pip install -e ".[test]"
 ```
 
 ```bash
