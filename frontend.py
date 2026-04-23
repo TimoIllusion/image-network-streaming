@@ -4,69 +4,70 @@ import streamlit as st
 
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 
-import sys
 import time
 
 import cv2
 
+from inference_streaming_benchmark.backend.api import BackendInterface
 from inference_streaming_benchmark.frontend.media import draw_detections, draw_fps
 from inference_streaming_benchmark.logging import logger
 
-# construct the argument parser and parse the arguments
-backend = sys.argv[1]
+BACKEND_NAMES = ["fastapi", "zmq", "imagezmq", "grpc"]
 
-# Streamlit webcam input
-st.title(f"Webcam Object Detection using {backend.upper()}")
+
+def _create_backend(name: str) -> BackendInterface:
+    if name == "fastapi":
+        from inference_streaming_benchmark.backend.fastapi.api import FastAPIBackendInterface
+
+        return FastAPIBackendInterface()
+    if name == "zmq":
+        from inference_streaming_benchmark.backend.zmq.api import ZMQBackendInterface
+
+        return ZMQBackendInterface()
+    if name == "imagezmq":
+        from inference_streaming_benchmark.backend.imagezmq.api import ImageZMQBackendInterface
+
+        return ImageZMQBackendInterface()
+    if name == "grpc":
+        from inference_streaming_benchmark.backend.grpc.api import GRPCBackendInterface
+
+        return GRPCBackendInterface()
+    raise ValueError(f"Invalid backend: {name}")
+
+
+selected = st.selectbox("Backend", BACKEND_NAMES)
+
+st.title(f"Webcam Object Detection using {selected.upper()}")
 infer = st.checkbox("Enable object detection")
 FRAME_WINDOW = st.image([])
 TEXT_MESSAGE = st.empty()
 
-# initialize state
-if "cap" not in st.session_state:
-    st.session_state["cap"] = None
+st.session_state.setdefault("cap", None)
+st.session_state.setdefault("backend_interface", None)
+st.session_state.setdefault("active_backend_name", None)
 
-if "backend_interface" not in st.session_state:
-    st.session_state["backend_interface"] = None
-
-# for debugging
 logger.debug("STREAMLIT APP ITERATION")
 logger.debug(st.session_state)
 logger.debug("INFER: {}", infer)
+logger.debug("SELECTED: {}", selected)
 
-# initialize/deactivate comms
-logger.debug("BACKEND_INTERFACE: {}", st.session_state["backend_interface"])
-if st.session_state["backend_interface"] is not None:
-    if not infer:
-        st.session_state["backend_interface"].close()
+current = st.session_state["backend_interface"]
+active = st.session_state["active_backend_name"]
+
+if not infer:
+    if current is not None:
+        current.close()
         st.session_state["backend_interface"] = None
+        st.session_state["active_backend_name"] = None
         logger.info("Backend comms closed")
-    else:
-        pass
 else:
-    if backend == "fastapi":
-        from inference_streaming_benchmark.backend.fastapi.api import FastAPIBackendInterface
-
-        backend_interface = FastAPIBackendInterface()
-    elif backend == "zmq":
-        from inference_streaming_benchmark.backend.zmq.api import ZMQBackendInterface
-
-        backend_interface = ZMQBackendInterface()
-    elif backend == "imagezmq":
-        from inference_streaming_benchmark.backend.imagezmq.api import (
-            ImageZMQBackendInterface,
-        )
-
-        backend_interface = ImageZMQBackendInterface()
-    elif backend == "grpc":
-        from inference_streaming_benchmark.backend.grpc.api import GRPCBackendInterface
-
-        backend_interface = GRPCBackendInterface()
-    else:
-        raise ValueError(f"Invalid backend: {backend}")
-    st.session_state["backend_interface"] = backend_interface
-    logger.info("Backend comms initialized")
-
-logger.debug(st.session_state)
+    if current is None or active != selected:
+        if current is not None:
+            current.close()
+            logger.info("Backend comms closed (switching to {})", selected)
+        st.session_state["backend_interface"] = _create_backend(selected)
+        st.session_state["active_backend_name"] = selected
+        logger.info("Backend comms initialized: {}", selected)
 
 # initialize camera
 if st.session_state["cap"] is None:
@@ -94,7 +95,6 @@ while True:
         fps = 1 / inference_duration
 
         if detection_results_single is not None:
-            # You can now process and display the detection results as needed
             TEXT_MESSAGE.text(detection_results_single)
 
             frame = draw_detections(frame, detection_results_single)

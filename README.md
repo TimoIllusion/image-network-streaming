@@ -32,7 +32,7 @@ pip install -e .
 ```bash
 python backend_fastapi.py
 
-streamlit run frontend.py fastapi
+streamlit run frontend.py
 
 http://127.0.0.1:8501
 ```
@@ -44,7 +44,7 @@ http://127.0.0.1:8501
 ```bash
 python backend_zmq.py
 
-streamlit run frontend.py zmq
+streamlit run frontend.py
 
 http://127.0.0.1:8501
 ```
@@ -56,7 +56,7 @@ http://127.0.0.1:8501
 ```bash
 python backend_imagezmq.py
 
-streamlit run frontend.py imagezmq
+streamlit run frontend.py
 
 http://127.0.0.1:8501
 ```
@@ -68,7 +68,7 @@ http://127.0.0.1:8501
 ```bash
 python backend_grpc.py
 
-streamlit run frontend.py grpc
+streamlit run frontend.py
 
 http://127.0.0.1:8501
 ```
