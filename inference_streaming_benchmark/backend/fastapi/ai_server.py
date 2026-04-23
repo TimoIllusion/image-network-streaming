@@ -12,26 +12,31 @@ from inference_streaming_benchmark.logging import logger
 app = FastAPI()
 
 
+def _infer_with_decode_timing(contents: bytes) -> tuple[list[dict], dict]:
+    t0 = time.perf_counter()
+    image = decode_jpeg_bytes(contents)
+    decode_ms = (time.perf_counter() - t0) * 1000
+    results, timings = run_inference(image)
+    timings["decode_ms"] = decode_ms
+    return results, timings
+
+
 @app.post("/detect/")
 async def detect(file: UploadFile = File(...)):
-    t0 = time.time()
+    t0 = time.perf_counter()
 
     contents = await file.read()
-    image = decode_jpeg_bytes(contents)
-
-    t1 = time.time()
 
     # YOLO inference is CPU/GPU bound and synchronous; run it off the event loop so
     # concurrent requests don't stall behind one long inference.
-    results = await run_in_threadpool(run_inference, image)
-
-    t2 = time.time()
+    results, timings = await run_in_threadpool(_infer_with_decode_timing, contents)
 
     logger.info(
-        "detect timings total=%.3fs decode=%.3fs infer=%.3fs",
-        (t2 - t0),
-        (t1 - t0),
-        (t2 - t1),
+        "detect total=%.1fms decode=%.1fms infer=%.1fms post=%.1fms",
+        (time.perf_counter() - t0) * 1000,
+        timings["decode_ms"],
+        timings["infer_ms"],
+        timings["post_ms"],
     )
 
-    return JSONResponse(content={"batched_detections": results})
+    return JSONResponse(content={"batched_detections": results, "timings": timings})

@@ -7,7 +7,6 @@ from inference_streaming_benchmark.backend.grpc.ai_server_pb2 import FrameReques
 from inference_streaming_benchmark.backend.grpc.ai_server_pb2_grpc import (
     AiDetectionServiceStub,
 )
-from inference_streaming_benchmark.logging import logger
 
 
 class GRPCBackendInterface(BackendInterface):
@@ -19,46 +18,47 @@ class GRPCBackendInterface(BackendInterface):
         self.channel = grpc.insecure_channel(f"{host}:{port}", options=options)
         self.stub = AiDetectionServiceStub(self.channel)
 
-    def send_frame_to_ai_server(self, frame) -> list[dict]:
-        t0 = time.time()
-        # _, encoded_image = cv2.imencode(".jpg", frame)
-        # frame_bytes = encoded_image.tobytes()
+    def send_frame_to_ai_server(self, frame) -> tuple[list[dict] | None, dict]:
+        timings = {}
+
+        t_total = time.perf_counter()
+
+        t0 = time.perf_counter()
         frame_bytes = frame.tobytes()
-        t1 = time.time()
+        timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
         response = self.stub.Detect(FrameRequest(image=frame_bytes))
-        # Process response
-        detection_results = response.results
-        # Assume batch size is always 1 for simplicity
-        detection_results_single = detection_results[0]
+        timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
-        if detection_results_single:
-            results = []
-            for box, conf, cl in zip(
-                detection_results_single.boxes,
-                detection_results_single.scores,
-                detection_results_single.classes,
-                strict=False,
-            ):
-                detection = {
+        timings["decode_ms"] = response.timings.decode_ms
+        timings["infer_ms"] = response.timings.infer_ms
+        timings["post_ms"] = response.timings.post_ms
+
+        detection_results = response.results
+        if not detection_results:
+            return None, timings
+
+        detection_results_single = detection_results[0]
+        if not detection_results_single:
+            return None, timings
+
+        results = []
+        for box, conf, cl in zip(
+            detection_results_single.boxes,
+            detection_results_single.scores,
+            detection_results_single.classes,
+            strict=False,
+        ):
+            results.append(
+                {
                     "box": {"x1": box.x1, "y1": box.y1, "x2": box.x2, "y2": box.y2},
                     "confidence": conf,
                     "class": cl,
                     "name": cl,
                 }
+            )
 
-                results.append(detection)
-
-                t2 = time.time()
-
-                logger.info(f"GRPCBackendInterface total time: {t2 - t0}")
-                logger.info(f"encoding time: {t1 - t0}")
-                logger.info(f"response time: {t2 - t1}")
-
-            return results
-
-        else:
-            return None
+        return results, timings
 
     def close(self):
         self.channel.close()
