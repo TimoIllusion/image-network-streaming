@@ -33,6 +33,7 @@ jobs:
           python -m pip install \
             fastapi \
             httpx \
+            loguru \
             numpy \
             opencv-python-headless \
             pillow \
