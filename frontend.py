@@ -10,73 +10,95 @@ from pathlib import Path
 import cv2
 import requests
 import uvicorn
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from inference_streaming_benchmark.backend.api import BackendInterface
 from inference_streaming_benchmark.frontend.media import draw_detections, draw_fps
 from inference_streaming_benchmark.logging import logger
+from inference_streaming_benchmark.transports import registry
+from inference_streaming_benchmark.transports.base import Transport
 
-# Hardcoded transport registry: name → (data port, sidecar port).
-# Host is assumed to be localhost for the status probe and the client.
-TRANSPORTS: dict[str, dict[str, int]] = {
-    "http_multipart": {"data_port": 8008, "sidecar_port": 9001},
-    "zmq": {"data_port": 5555, "sidecar_port": 9002},
-    "imagezmq": {"data_port": 5556, "sidecar_port": 9003},
-    "grpc": {"data_port": 50051, "sidecar_port": 9004},
-}
+# importing the transports package above triggers every transport's registration.
+from inference_streaming_benchmark import transports  # noqa: F401  isort:skip
 
 HOST = "localhost"
-HEALTH_TIMEOUT_S = 0.2
 UI_PORT = 8501
+CONTROL_BASE = "http://localhost:9000"
+CONTROL_TIMEOUT_S = 5.0
 
 # Columns we collect per frame and show as medians in the stats table.
-# transmission_ms = total - infer: end-to-end cost excluding only AI inference,
-# useful for comparing transport protocols (includes encode/decode/comms/post).
+# transmission_ms = total - infer: end-to-end cost excluding only AI inference.
 TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "transmission_ms", "total_ms")
 
 STATIC_DIR = Path(__file__).parent / "inference_streaming_benchmark" / "frontend" / "static"
 
 
-def _create_backend(transport: str, host: str, port: int) -> BackendInterface:
-    if transport == "http_multipart":
-        from inference_streaming_benchmark.backend.http_multipart.api import HTTPMultipartBackendInterface
-
-        return HTTPMultipartBackendInterface(host=host, port=port)
-    if transport == "zmq":
-        from inference_streaming_benchmark.backend.zmq.api import ZMQBackendInterface
-
-        return ZMQBackendInterface(host=host, port=port)
-    if transport == "imagezmq":
-        from inference_streaming_benchmark.backend.imagezmq.api import ImageZMQBackendInterface
-
-        return ImageZMQBackendInterface(host=host, port=port)
-    if transport == "grpc":
-        from inference_streaming_benchmark.backend.grpc.api import GRPCBackendInterface
-
-        return GRPCBackendInterface(host=host, port=port)
-    raise ValueError(f"Unknown transport: {transport}")
+_MOCK_IMAGE_PATH = Path(__file__).parent / "resources" / "example_dall_e.png"
 
 
-def _probe_sidecar(sidecar_port: int) -> bool:
-    try:
-        r = requests.get(f"http://{HOST}:{sidecar_port}/health", timeout=HEALTH_TIMEOUT_S)
-        return r.ok
-    except requests.RequestException:
-        return False
+class _FakeVideoCapture:
+    """Static 1920×1080 BGR frames for Claude-driven smoke tests.
+
+    Enabled by MOCK_CAMERA=1. Returns the resources/example_dall_e.png image
+    (resized to 1920×1080) with a timestamp overlay at ~30fps. The image
+    contains people, chairs, a dining table, and a laptop so YOLO produces
+    real detections that exercise draw_detections.
+    """
+
+    def __init__(self):
+        self._t0 = time.time()
+        self._released = False
+        img = cv2.imread(str(_MOCK_IMAGE_PATH))
+        if img is None:
+            raise RuntimeError(f"MOCK_CAMERA: could not load {_MOCK_IMAGE_PATH}")
+        self._base = cv2.resize(img, (1920, 1080))
+
+    def read(self):
+        if self._released:
+            return False, None
+        frame = self._base.copy()
+        elapsed = time.time() - self._t0
+        cv2.putText(
+            frame,
+            f"MOCK t={elapsed:.1f}s",
+            (50, 80),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.5,
+            (255, 255, 255),
+            3,
+            cv2.LINE_AA,
+        )
+        time.sleep(1 / 30)
+        return True, frame
+
+    def set(self, *_args, **_kwargs):
+        pass
+
+    def release(self):
+        self._released = True
+
+
+def _open_camera():
+    if os.environ.get("MOCK_CAMERA") == "1":
+        logger.info("MOCK_CAMERA=1 — using synthesized frame source")
+        return _FakeVideoCapture()
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    return cap
 
 
 class FrontendState:
-    """Single-process state shared between the MJPEG generator and the control endpoints.
+    """Shared between the MJPEG generator and the control endpoints.
 
-    The lock guards backend swaps so the video generator never sees a half-closed interface.
+    The lock guards transport swaps so the video generator never sees a half-closed client.
     """
 
     def __init__(self):
         self.cap: cv2.VideoCapture | None = None
-        self.backend: BackendInterface | None = None
+        self.client: Transport | None = None
         self.active_transport: str | None = None
         self.infer: bool = False
         self.bench_results: dict = {}
@@ -85,41 +107,48 @@ class FrontendState:
     def ensure_camera(self):
         if self.cap is None:
             logger.info("Start camera initialization")
-            cap = cv2.VideoCapture(0)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-            self.cap = cap
+            self.cap = _open_camera()
             logger.info("Camera initialized")
 
-    def set_control(self, backend: str, infer: bool):
+    def set_control(self, transport_name: str, infer: bool) -> None:
         with self.lock:
             self.infer = infer
             if not infer:
-                if self.backend is not None:
-                    self.backend.close()
-                    self.backend = None
-                    self.active_transport = None
-                    logger.info("Backend comms closed")
+                self._disconnect_locked()
                 return
 
-            if self.active_transport != backend or self.backend is None:
-                if self.backend is not None:
-                    self.backend.close()
-                    logger.info("Backend comms closed (switching to {})", backend)
-                port = TRANSPORTS[backend]["data_port"]
-                self.backend = _create_backend(backend, HOST, port)
-                self.active_transport = backend
-                logger.info(f"Backend comms initialized: {backend}")
+            if self.active_transport == transport_name and self.client is not None:
+                return
 
-    def record_timing(self, backend: str, timings: dict):
-        # comms = pure network transit (total minus all endpoint processing)
+            # Ask the server to switch to the requested transport first.
+            self._disconnect_locked()
+            resp = requests.post(f"{CONTROL_BASE}/switch", json={"name": transport_name}, timeout=CONTROL_TIMEOUT_S)
+            resp.raise_for_status()
+            port = resp.json()["port"]
+
+            cls = registry.get(transport_name)
+            client = cls()
+            client.connect(HOST, port)
+            self.client = client
+            self.active_transport = transport_name
+            logger.info(f"client connected: {transport_name} → :{port}")
+
+    def _disconnect_locked(self) -> None:
+        if self.client is not None:
+            try:
+                self.client.disconnect()
+            except Exception:
+                logger.exception("failed to disconnect current client")
+            self.client = None
+            self.active_transport = None
+
+    def record_timing(self, transport_name: str, timings: dict) -> None:
         server_ms = timings.get("decode_ms", 0.0) + timings.get("infer_ms", 0.0) + timings.get("post_ms", 0.0)
         comms_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("encode_ms", 0.0) - server_ms)
-        # transmission = everything but AI inference (encode + decode + comms + post)
         transmission_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("infer_ms", 0.0))
         timings = {**timings, "comms_ms": comms_ms, "transmission_ms": transmission_ms}
 
-        bench = self.bench_results.setdefault(backend, {"active_time_s": 0.0, **{col: [] for col in TIMING_COLUMNS}})
+        bench = self.bench_results.setdefault(transport_name, {"active_time_s": 0.0, **{col: [] for col in TIMING_COLUMNS}})
         for col in TIMING_COLUMNS:
             if col in timings:
                 bench[col].append(timings[col])
@@ -127,13 +156,13 @@ class FrontendState:
 
     def build_stats_rows(self) -> list[dict]:
         rows = []
-        for backend, data in self.bench_results.items():
+        for name, data in self.bench_results.items():
             totals = data["total_ms"]
             if not totals:
                 continue
             duration_s = data["active_time_s"]
             row = {
-                "Backend": backend,
+                "Backend": name,
                 "Frames": len(totals),
                 "Duration (s)": f"{duration_s:.1f}",
                 "FPS": f"{len(totals) / duration_s:.1f}" if duration_s > 0 else "-",
@@ -157,7 +186,19 @@ def index():
 
 @app.get("/api/status")
 def api_status():
-    return {name: _probe_sidecar(cfg["sidecar_port"]) for name, cfg in TRANSPORTS.items()}
+    """Fetch transport availability from the AI server's control plane.
+
+    Returns a ``{name: online}`` dict shaped like the pre-refactor API so the
+    existing JS doesn't need to change. "online" here means "known to the server";
+    the currently active transport also has ``active: true`` in /api/transports.
+    """
+    try:
+        r = requests.get(f"{CONTROL_BASE}/transports", timeout=CONTROL_TIMEOUT_S)
+        r.raise_for_status()
+    except requests.RequestException:
+        # server unreachable → all transports shown offline
+        return {name: False for name in registry.all_transports()}
+    return {item["name"]: True for item in r.json()}
 
 
 class ControlBody(BaseModel):
@@ -167,9 +208,14 @@ class ControlBody(BaseModel):
 
 @app.post("/api/control")
 def api_control(body: ControlBody):
-    if body.backend not in TRANSPORTS:
-        return JSONResponse({"error": f"unknown backend: {body.backend}"}, status_code=400)
-    state.set_control(body.backend, body.infer)
+    if body.backend not in registry.all_transports():
+        raise HTTPException(status_code=400, detail=f"unknown transport: {body.backend}")
+    try:
+        state.set_control(body.backend, body.infer)
+    except requests.HTTPError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    except requests.RequestException as e:
+        raise HTTPException(status_code=503, detail=f"control plane unreachable: {e}") from e
     return {"ok": True, "backend": state.active_transport, "infer": state.infer}
 
 
@@ -192,18 +238,17 @@ def _mjpeg_frames():
     while True:
         ret, frame = state.cap.read()
         if not ret:
-            logger.warning("Failed to capture frame")
+            logger.warning("failed to capture frame")
             time.sleep(0.01)
             continue
 
-        # Snapshot the backend under the lock so a swap mid-send never races.
         with state.lock:
-            active_backend = state.backend
+            active_client = state.client
             active_transport = state.active_transport
             infer = state.infer
 
-        if infer and active_backend is not None and active_transport is not None:
-            detections, timings = active_backend.send_frame_to_ai_server(frame)
+        if infer and active_client is not None and active_transport is not None:
+            detections, timings = active_client.send(frame)
             state.record_timing(active_transport, timings)
             fps = 1000 / timings["total_ms"] if timings.get("total_ms", 0) > 0 else 0
             if detections is not None:
@@ -213,8 +258,7 @@ def _mjpeg_frames():
         ok, buf = cv2.imencode(".jpg", frame)
         if not ok:
             continue
-        jpg = buf.tobytes()
-        yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpg + b"\r\n"
+        yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + buf.tobytes() + b"\r\n"
 
 
 @app.get("/video_feed")

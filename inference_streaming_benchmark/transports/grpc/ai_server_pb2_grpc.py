@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from inference_streaming_benchmark.backend.grpc import ai_server_pb2 as ai__server__pb2
+from inference_streaming_benchmark.transports.grpc import ai_server_pb2 as inference__streaming__benchmark_dot_transports_dot_grpc_dot_ai__server__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in ai_server_pb2_grpc.py depends on'
+        + ' but the generated code in inference_streaming_benchmark/transports/grpc/ai_server_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,8 +36,8 @@ class AiDetectionServiceStub(object):
         """
         self.Detect = channel.unary_unary(
                 '/aiapp.AiDetectionService/Detect',
-                request_serializer=ai__server__pb2.FrameRequest.SerializeToString,
-                response_deserializer=ai__server__pb2.DetectionResponse.FromString,
+                request_serializer=inference__streaming__benchmark_dot_transports_dot_grpc_dot_ai__server__pb2.FrameRequest.SerializeToString,
+                response_deserializer=inference__streaming__benchmark_dot_transports_dot_grpc_dot_ai__server__pb2.DetectionResponse.FromString,
                 _registered_method=True)
 
 
@@ -55,8 +55,8 @@ def add_AiDetectionServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Detect': grpc.unary_unary_rpc_method_handler(
                     servicer.Detect,
-                    request_deserializer=ai__server__pb2.FrameRequest.FromString,
-                    response_serializer=ai__server__pb2.DetectionResponse.SerializeToString,
+                    request_deserializer=inference__streaming__benchmark_dot_transports_dot_grpc_dot_ai__server__pb2.FrameRequest.FromString,
+                    response_serializer=inference__streaming__benchmark_dot_transports_dot_grpc_dot_ai__server__pb2.DetectionResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -84,8 +84,8 @@ class AiDetectionService(object):
             request,
             target,
             '/aiapp.AiDetectionService/Detect',
-            ai__server__pb2.FrameRequest.SerializeToString,
-            ai__server__pb2.DetectionResponse.FromString,
+            inference__streaming__benchmark_dot_transports_dot_grpc_dot_ai__server__pb2.FrameRequest.SerializeToString,
+            inference__streaming__benchmark_dot_transports_dot_grpc_dot_ai__server__pb2.DetectionResponse.FromString,
             options,
             channel_credentials,
             insecure,
