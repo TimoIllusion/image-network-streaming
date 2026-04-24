@@ -19,6 +19,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # setuptools-scm needs full history to derive the version from the latest tag.
+          fetch-depth: 0
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v4
