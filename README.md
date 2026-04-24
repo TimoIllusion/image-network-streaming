@@ -122,6 +122,9 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 - [ ] Split `frontend.py` into a `frontend/` package (camera, mjpeg, state, app)
 - [ ] Decompose `FrontendState` into camera, transport-session, and benchmark-collector responsibilities
 - [ ] Consolidate ports/hosts into a single env-driven config module
+- [ ] Fix table layout in frontend
+- [ ] Add export button to export table in ui as markdown
+- [ ] Improve on the fly protocol switch and make it seamless
 
 ## AI Assistance
 
