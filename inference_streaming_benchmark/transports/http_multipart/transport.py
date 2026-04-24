@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import requests
 import uvicorn
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
@@ -17,11 +17,16 @@ from inference_streaming_benchmark.logging import logger
 
 from ..base import Handler, Transport
 
+# Raw payload shape — must match what the frontend camera produces.
+# Kept in sync with grpc/transport.py:38 and frontend.py:_open_camera.
+_RAW_SHAPE = (1080, 1920, 3)
+
 
 class HTTPMultipartTransport(Transport):
     name = "http_multipart"
     display_name = "HTTP multipart (FastAPI)"
     default_port = 8008
+    RAW = False
 
     def __init__(self):
         self._uvicorn_server: uvicorn.Server | None = None
@@ -31,32 +36,48 @@ class HTTPMultipartTransport(Transport):
 
     # ----- server role -----
 
-    @staticmethod
-    def build_app(handler: Handler) -> FastAPI:
+    @classmethod
+    def build_app(cls, handler: Handler) -> FastAPI:
         """Build the FastAPI app for this transport. Exposed for testability (TestClient)."""
         app = FastAPI()
+        raw = cls.RAW
+        log_name = cls.name
 
-        async def detect(file: UploadFile = File(...)):
-            t0 = time.perf_counter()
-            contents = await file.read()
-
-            def _infer(data: bytes):
-                t = time.perf_counter()
+        def _infer(data: bytes):
+            t = time.perf_counter()
+            if raw:
+                image = np.frombuffer(data, dtype=np.uint8).reshape(_RAW_SHAPE)
+            else:
                 image = decode_jpeg_bytes(data)
-                decode_ms = (time.perf_counter() - t) * 1000
-                results, timings = handler(image)
-                timings["decode_ms"] = decode_ms
-                return results, timings
+            decode_ms = (time.perf_counter() - t) * 1000
+            results, timings = handler(image)
+            timings["decode_ms"] = decode_ms
+            return results, timings
 
-            results, timings = await run_in_threadpool(_infer, contents)
-            logger.info(
-                "http_multipart total=%.1fms decode=%.1fms infer=%.1fms post=%.1fms",
-                (time.perf_counter() - t0) * 1000,
-                timings["decode_ms"],
-                timings["infer_ms"],
-                timings["post_ms"],
-            )
-            return JSONResponse(content={"batched_detections": results, "timings": timings})
+        if raw:
+
+            async def detect(request: Request):
+                t0 = time.perf_counter()
+                contents = await request.body()
+                results, timings = await run_in_threadpool(_infer, contents)
+                logger.info(
+                    f"{log_name} total={(time.perf_counter() - t0) * 1000:.1f}ms "
+                    f"decode={timings['decode_ms']:.1f}ms infer={timings['infer_ms']:.1f}ms "
+                    f"post={timings['post_ms']:.1f}ms"
+                )
+                return JSONResponse(content={"batched_detections": results, "timings": timings})
+        else:
+
+            async def detect(file: UploadFile = File(...)):
+                t0 = time.perf_counter()
+                contents = await file.read()
+                results, timings = await run_in_threadpool(_infer, contents)
+                logger.info(
+                    f"{log_name} total={(time.perf_counter() - t0) * 1000:.1f}ms "
+                    f"decode={timings['decode_ms']:.1f}ms infer={timings['infer_ms']:.1f}ms "
+                    f"post={timings['post_ms']:.1f}ms"
+                )
+                return JSONResponse(content={"batched_detections": results, "timings": timings})
 
         app.post("/detect/")(detect)
         return app
@@ -88,11 +109,23 @@ class HTTPMultipartTransport(Transport):
         try:
             t_total = time.perf_counter()
             t0 = time.perf_counter()
-            _, encoded = cv2.imencode(".jpg", frame)
+            if self.RAW:
+                payload = frame.tobytes()
+            else:
+                _, encoded = cv2.imencode(".jpg", frame)
+                payload = encoded.tobytes()
             timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
-            files = {"file": ("frame.jpg", io.BytesIO(encoded.tobytes()), "image/jpeg")}
-            response = self._session.post(self._url, files=files, timeout=(2, 30))
+            if self.RAW:
+                response = self._session.post(
+                    self._url,
+                    data=payload,
+                    headers={"Content-Type": "application/octet-stream"},
+                    timeout=(2, 30),
+                )
+            else:
+                files = {"file": ("frame.jpg", io.BytesIO(payload), "image/jpeg")}
+                response = self._session.post(self._url, files=files, timeout=(2, 30))
             timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
             if response.status_code == 200:
@@ -101,7 +134,7 @@ class HTTPMultipartTransport(Transport):
                 return data["batched_detections"][0], timings
             return None, timings
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-            logger.error(f"http_multipart send failed: {e}")
+            logger.error(f"{self.name} send failed: {e}")
             return None, timings
 
     def disconnect(self) -> None:
@@ -109,3 +142,10 @@ class HTTPMultipartTransport(Transport):
             self._session.close()
             self._session = None
         self._url = None
+
+
+class HTTPMultipartRawTransport(HTTPMultipartTransport):
+    name = "http_multipart_raw"
+    display_name = "HTTP raw (FastAPI, ndarray)"
+    default_port = 8010
+    RAW = True
