@@ -62,7 +62,7 @@ ignore = ["E203"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = ["E402"]
-"inference_streaming_benchmark/backend/fastapi/ai_server.py" = ["B008"]
+"inference_streaming_benchmark/backend/http_multipart/ai_server.py" = ["B008"]
 
 [tool.ruff.format]
 line-ending = "auto"

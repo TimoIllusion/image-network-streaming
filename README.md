@@ -1,15 +1,15 @@
 # inference-streaming-benchmark
 
-Comparison implementation for image transmission and inference response using an AI inference server with multiple communication systems: FastAPI, ZeroMQ (ZMQ), ImageZMQ, grpc.
+Comparison implementation for image transmission and inference response using an AI inference server with multiple communication systems: HTTP multipart (FastAPI), ZeroMQ (ZMQ), ImageZMQ, grpc.
 
 Results for 1920×1080 images on a MacBook Pro M2 Pro (YOLOv8n, MPS inference):
 
-| Backend  | Transmission (ms) | Inference (ms) | Total (ms) |
-| -------- | ----------------- | -------------- | ---------- |
-| ImageZMQ | 3.4               | 19.8           | 23.1       |
-| ZMQ      | 8.3               | 19.6           | 32.9       |
-| gRPC     | 9.3               | 19.7           | 29.3       |
-| FastAPI  | 10.9              | 19.2           | 34.6       |
+| Backend                  | Transmission (ms) | Inference (ms) | Total (ms) |
+| ------------------------ | ----------------- | -------------- | ---------- |
+| ImageZMQ                 | 3.4               | 19.8           | 23.1       |
+| ZMQ                      | 8.3               | 19.6           | 32.9       |
+| gRPC                     | 9.3               | 19.7           | 29.3       |
+| HTTP multipart (FastAPI) | 10.9              | 19.2           | 34.6       |
 
 
 ## Setup
@@ -30,21 +30,21 @@ pip install -e .
 
 >Note: Each backend binds its own data port plus a small HTTP sidecar used by the frontend as a status indicator. You can run any subset (or all) of the backends at once — the frontend dropdown shows which are online.
 
-| Transport | Data port | Sidecar port |
-| --------- | --------- | ------------ |
-| fastapi   | 8008      | 9001         |
-| zmq       | 5555      | 9002         |
-| imagezmq  | 5556      | 9003         |
-| grpc      | 50051     | 9004         |
+| Transport      | Data port | Sidecar port |
+| -------------- | --------- | ------------ |
+| http_multipart | 8008      | 9001         |
+| zmq            | 5555      | 9002         |
+| imagezmq       | 5556      | 9003         |
+| grpc           | 50051     | 9004         |
 
 To start all four at once: `./scripts/run_all_backends.sh` (Ctrl+C stops them all).
 
-**Using FastAPI for communication**
+**Using HTTP multipart (FastAPI + multipart/form-data) for communication**
 
 >Note: The order of starting is important!
 
 ```bash
-python backend_fastapi.py
+python backend_http_multipart.py
 
 streamlit run frontend.py
 
@@ -116,7 +116,7 @@ docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all -p 5556:5556 infer
 ## TODO
 
 - [x] Dockerize ai server
-- [ ] Rename "fastapi" backend to a more descriptive label (e.g. `pure-http-multipart`) that reflects the protocol rather than the framework
+- [x] Rename "fastapi" backend to a more descriptive label (e.g. `pure-http-multipart`) that reflects the protocol rather than the framework
 - [ ] Replace Streamlit frontend with Flask or a comparable lightweight framework for better control and lower overhead
 - [ ] Improve benchmark statistics: add a dedicated "transmission time" column that excludes inference and preprocessing (encode + decode) so pure transport overhead is isolated
 

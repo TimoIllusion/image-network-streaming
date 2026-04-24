@@ -17,7 +17,7 @@ from inference_streaming_benchmark.logging import logger
 # Hardcoded transport registry: name → (data port, sidecar port).
 # Host is assumed to be localhost for the status probe and the client.
 TRANSPORTS: dict[str, dict[str, int]] = {
-    "fastapi": {"data_port": 8008, "sidecar_port": 9001},
+    "http_multipart": {"data_port": 8008, "sidecar_port": 9001},
     "zmq": {"data_port": 5555, "sidecar_port": 9002},
     "imagezmq": {"data_port": 5556, "sidecar_port": 9003},
     "grpc": {"data_port": 50051, "sidecar_port": 9004},
@@ -35,10 +35,10 @@ TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "
 
 
 def _create_backend(transport: str, host: str, port: int) -> BackendInterface:
-    if transport == "fastapi":
-        from inference_streaming_benchmark.backend.fastapi.api import FastAPIBackendInterface
+    if transport == "http_multipart":
+        from inference_streaming_benchmark.backend.http_multipart.api import HTTPMultipartBackendInterface
 
-        return FastAPIBackendInterface(host=host, port=port)
+        return HTTPMultipartBackendInterface(host=host, port=port)
     if transport == "zmq":
         from inference_streaming_benchmark.backend.zmq.api import ZMQBackendInterface
 

@@ -8,7 +8,7 @@ from inference_streaming_benchmark.backend.api import BackendInterface
 from inference_streaming_benchmark.logging import logger
 
 
-class FastAPIBackendInterface(BackendInterface):
+class HTTPMultipartBackendInterface(BackendInterface):
     def __init__(self, host: str = "localhost", port: int = 8008):
         self.server_url = f"http://{host}:{port}/detect/"
         # Reuse TCP connections across frames (avoids per-frame handshake/slowdown).
@@ -46,4 +46,4 @@ class FastAPIBackendInterface(BackendInterface):
         try:
             self._session.close()
         except Exception:
-            logger.exception("Failed to close FastAPI backend session")
+            logger.exception("Failed to close HTTP multipart backend session")

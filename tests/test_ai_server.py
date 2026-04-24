@@ -7,7 +7,7 @@ pytest.importorskip("PIL")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from inference_streaming_benchmark.backend.fastapi.ai_server import app  # noqa: E402
+from inference_streaming_benchmark.backend.http_multipart.ai_server import app  # noqa: E402
 from inference_streaming_benchmark.logging import logger  # noqa: E402
 
 
@@ -19,7 +19,7 @@ def test_end_to_end(monkeypatch):
     - No Ultralytics weights download / GPU required (inference is stubbed)
     """
 
-    import inference_streaming_benchmark.backend.fastapi.ai_server as ai_server
+    import inference_streaming_benchmark.backend.http_multipart.ai_server as ai_server
 
     _fake_detections = [[{"box": {"x1": 10, "y1": 20, "x2": 30, "y2": 40}, "confidence": 0.99, "class": 0, "name": "object"}]]
 
