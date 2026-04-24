@@ -113,6 +113,20 @@ docker build -f ./docker/Dockerfile -t inference-streaming-benchmark:latest .
 docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all -p 5556:5556 inference-streaming-benchmark:latest
 ```
 
+## Versioning
+
+Versions are derived from git tags via [setuptools-scm](https://github.com/pypa/setuptools_scm). Every merge to `main` triggers `.github/workflows/auto-tag.yml`, which creates the next tag (e.g. `v0.1.5` → `v0.1.6`).
+
+The default bump is **patch**. Override by including one of these keywords in a commit message of the merged range:
+
+| Keyword  | Effect                        |
+| -------- | ----------------------------- |
+| `#minor` | minor bump (`v0.1.5` → `v0.2.0`) |
+| `#major` | major bump (`v0.1.5` → `v1.0.0`) |
+| `#none`  | skip tagging for this merge   |
+
+For squash-merged PRs, putting the keyword in the PR title or description works, since GitHub includes both in the resulting commit message. For merge commits, put it in a branch commit or edit the merge commit message.
+
 ## Common Issues
 
 - camera not working and throwing errors -> close all open instances of streamlit in browser except one and reload it
