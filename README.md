@@ -76,8 +76,16 @@ docker build -f ./docker/Dockerfile -t inference-streaming-benchmark:latest .
 ```
 
 ```bash
-# runs imagezmq backend by default
-docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all -p 5556:5556 inference-streaming-benchmark:latest
+# Runs `python serve.py` (http_multipart active by default).
+# Expose :9000 (control plane) plus whichever transport port you want to reach.
+docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all \
+  -p 9000:9000 -p 8008:8008 \
+  inference-streaming-benchmark:latest
+
+# To start with a different default transport, pass through the flag and expose its port:
+docker run -it --rm --shm-size=8g --gpus=all \
+  -p 9000:9000 -p 5556:5556 \
+  inference-streaming-benchmark:latest python serve.py --default imagezmq
 ```
 
 ## Versioning

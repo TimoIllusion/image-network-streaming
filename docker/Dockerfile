@@ -14,4 +14,8 @@ RUN apt-get update \
 
 RUN python -m pip install .
 
-CMD ["python", "backend_imagezmq.py"]
+# Control plane on 9000. Default transport (http_multipart) binds 8008 inside the container.
+# Override with `--default <name>`; expose the matching port when running the image.
+EXPOSE 9000 8008
+
+CMD ["python", "serve.py"]
