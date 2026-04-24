@@ -1,14 +1,19 @@
 import os
 
-import streamlit as st
-
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 
 import statistics
+import threading
 import time
+from pathlib import Path
 
 import cv2
 import requests
+import uvicorn
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from inference_streaming_benchmark.backend.api import BackendInterface
 from inference_streaming_benchmark.frontend.media import draw_detections, draw_fps
@@ -25,13 +30,14 @@ TRANSPORTS: dict[str, dict[str, int]] = {
 
 HOST = "localhost"
 HEALTH_TIMEOUT_S = 0.2
-STATUS_CACHE_TTL_S = 3.0
-STATS_REFRESH_EVERY_N_FRAMES = 5
+UI_PORT = 8501
 
 # Columns we collect per frame and show as medians in the stats table.
 # transmission_ms = total - infer: end-to-end cost excluding only AI inference,
 # useful for comparing transport protocols (includes encode/decode/comms/post).
 TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "transmission_ms", "total_ms")
+
+STATIC_DIR = Path(__file__).parent / "inference_streaming_benchmark" / "frontend" / "static"
 
 
 def _create_backend(transport: str, host: str, port: int) -> BackendInterface:
@@ -62,145 +68,159 @@ def _probe_sidecar(sidecar_port: int) -> bool:
         return False
 
 
-def _get_statuses() -> dict[str, bool]:
-    cached_at = st.session_state.get("status_cached_at", 0.0)
-    if time.time() - cached_at < STATUS_CACHE_TTL_S and "statuses" in st.session_state:
-        return st.session_state["statuses"]
-    statuses = {name: _probe_sidecar(cfg["sidecar_port"]) for name, cfg in TRANSPORTS.items()}
-    st.session_state["statuses"] = statuses
-    st.session_state["status_cached_at"] = time.time()
-    return statuses
+class FrontendState:
+    """Single-process state shared between the MJPEG generator and the control endpoints.
 
+    The lock guards backend swaps so the video generator never sees a half-closed interface.
+    """
 
-def _record_timing(backend: str, timings: dict) -> None:
-    """Accumulate a single frame's timings (ms) into the per-backend session store."""
-    # comms = pure network transit (total minus all endpoint processing)
-    server_ms = timings.get("decode_ms", 0.0) + timings.get("infer_ms", 0.0) + timings.get("post_ms", 0.0)
-    comms_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("encode_ms", 0.0) - server_ms)
-    # transmission = everything but AI inference (encode + decode + comms + post)
-    transmission_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("infer_ms", 0.0))
-    timings = {**timings, "comms_ms": comms_ms, "transmission_ms": transmission_ms}
+    def __init__(self):
+        self.cap: cv2.VideoCapture | None = None
+        self.backend: BackendInterface | None = None
+        self.active_transport: str | None = None
+        self.infer: bool = False
+        self.bench_results: dict = {}
+        self.lock = threading.Lock()
 
-    bench = st.session_state["bench_results"].setdefault(backend, {"active_time_s": 0.0, **{col: [] for col in TIMING_COLUMNS}})
-    for col in TIMING_COLUMNS:
-        if col in timings:
-            bench[col].append(timings[col])
-    bench["active_time_s"] += timings.get("total_ms", 0.0) / 1000
+    def ensure_camera(self):
+        if self.cap is None:
+            logger.info("Start camera initialization")
+            cap = cv2.VideoCapture(0)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+            self.cap = cap
+            logger.info("Camera initialized")
 
+    def set_control(self, backend: str, infer: bool):
+        with self.lock:
+            self.infer = infer
+            if not infer:
+                if self.backend is not None:
+                    self.backend.close()
+                    self.backend = None
+                    self.active_transport = None
+                    logger.info("Backend comms closed")
+                return
 
-def _build_stats_rows() -> list[dict]:
-    rows = []
-    for backend, data in st.session_state["bench_results"].items():
-        totals = data["total_ms"]
-        if not totals:
-            continue
-        duration_s = data["active_time_s"]
-        row = {
-            "Backend": backend,
-            "Frames": len(totals),
-            "Duration (s)": f"{duration_s:.1f}",
-            "FPS": f"{len(totals) / duration_s:.1f}" if duration_s > 0 else "-",
-        }
-        # Median (p50) per column — a single representative number per timing.
+            if self.active_transport != backend or self.backend is None:
+                if self.backend is not None:
+                    self.backend.close()
+                    logger.info("Backend comms closed (switching to {})", backend)
+                port = TRANSPORTS[backend]["data_port"]
+                self.backend = _create_backend(backend, HOST, port)
+                self.active_transport = backend
+                logger.info(f"Backend comms initialized: {backend}")
+
+    def record_timing(self, backend: str, timings: dict):
+        # comms = pure network transit (total minus all endpoint processing)
+        server_ms = timings.get("decode_ms", 0.0) + timings.get("infer_ms", 0.0) + timings.get("post_ms", 0.0)
+        comms_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("encode_ms", 0.0) - server_ms)
+        # transmission = everything but AI inference (encode + decode + comms + post)
+        transmission_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("infer_ms", 0.0))
+        timings = {**timings, "comms_ms": comms_ms, "transmission_ms": transmission_ms}
+
+        bench = self.bench_results.setdefault(backend, {"active_time_s": 0.0, **{col: [] for col in TIMING_COLUMNS}})
         for col in TIMING_COLUMNS:
-            samples = data[col]
-            row[col.replace("_ms", " (ms)")] = f"{statistics.median(samples):.1f}" if samples else "-"
-        rows.append(row)
-    return rows
+            if col in timings:
+                bench[col].append(timings[col])
+        bench["active_time_s"] += timings.get("total_ms", 0.0) / 1000
+
+    def build_stats_rows(self) -> list[dict]:
+        rows = []
+        for backend, data in self.bench_results.items():
+            totals = data["total_ms"]
+            if not totals:
+                continue
+            duration_s = data["active_time_s"]
+            row = {
+                "Backend": backend,
+                "Frames": len(totals),
+                "Duration (s)": f"{duration_s:.1f}",
+                "FPS": f"{len(totals) / duration_s:.1f}" if duration_s > 0 else "-",
+            }
+            for col in TIMING_COLUMNS:
+                samples = data[col]
+                row[col.replace("_ms", " (ms)")] = f"{statistics.median(samples):.1f}" if samples else "-"
+            rows.append(row)
+        return rows
 
 
-def _render_stats(placeholder) -> None:
-    rows = _build_stats_rows()
-    if rows:
-        placeholder.table(rows)
-    else:
-        placeholder.caption("No measurements yet — enable object detection to start collecting.")
+state = FrontendState()
+app = FastAPI()
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-# --- Page layout ---
+@app.get("/")
+def index():
+    return FileResponse(STATIC_DIR / "index.html")
 
-st.session_state.setdefault("bench_results", {})
-statuses = _get_statuses()
-option_labels = {name: f"{name} {'✅' if ok else '❌ offline'}" for name, ok in statuses.items()}
 
-# Title first, then controls, then stats, then video.
-st.title("Webcam Object Detection")
+@app.get("/api/status")
+def api_status():
+    return {name: _probe_sidecar(cfg["sidecar_port"]) for name, cfg in TRANSPORTS.items()}
 
-selected = st.selectbox("Backend", list(TRANSPORTS.keys()), format_func=lambda n: option_labels[n])
-infer = st.checkbox("Enable object detection")
 
-stats_placeholder = st.empty()
-if st.button("Clear results"):
-    st.session_state["bench_results"] = {}
-_render_stats(stats_placeholder)
+class ControlBody(BaseModel):
+    backend: str
+    infer: bool
 
-FRAME_WINDOW = st.image([])
-TEXT_MESSAGE = st.empty()
 
-st.session_state.setdefault("cap", None)
-st.session_state.setdefault("backend_interface", None)
-st.session_state.setdefault("active_transport", None)
+@app.post("/api/control")
+def api_control(body: ControlBody):
+    if body.backend not in TRANSPORTS:
+        return JSONResponse({"error": f"unknown backend: {body.backend}"}, status_code=400)
+    state.set_control(body.backend, body.infer)
+    return {"ok": True, "backend": state.active_transport, "infer": state.infer}
 
-logger.debug("STREAMLIT APP ITERATION")
-logger.debug(st.session_state)
-logger.debug("INFER: {}", infer)
-logger.debug("SELECTED: {}", selected)
 
-current = st.session_state["backend_interface"]
-active = st.session_state["active_transport"]
+@app.post("/api/clear")
+def api_clear():
+    state.bench_results = {}
+    return {"ok": True}
 
-if not infer:
-    if current is not None:
-        current.close()
-        st.session_state["backend_interface"] = None
-        st.session_state["active_transport"] = None
-        logger.info("Backend comms closed")
-else:
-    if not statuses.get(selected, False):
-        st.error(f"Selected backend '{selected}' is offline. Start it and try again.")
-        st.stop()
-    if current is None or active != selected:
-        if current is not None:
-            current.close()
-            logger.info("Backend comms closed (switching to {})", selected)
-        data_port = TRANSPORTS[selected]["data_port"]
-        st.session_state["backend_interface"] = _create_backend(selected, HOST, data_port)
-        st.session_state["active_transport"] = selected
-        logger.info(f"Backend comms initialized: {selected}")
 
-# initialize camera
-if st.session_state["cap"] is None:
-    TEXT_MESSAGE.text("Initializing camera...")
-    logger.info("Start camera initialization")
-    cap = cv2.VideoCapture(0)  # Use 0 for the primary webcam
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-    st.session_state["cap"] = cap
-    logger.info("Camera initialized")
-else:
-    cap = st.session_state["cap"]
+@app.get("/api/stats")
+def api_stats():
+    return state.build_stats_rows()
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        st.error("Failed to capture frame")
-        continue
 
-    if infer:
-        detection_results_single, timings = st.session_state["backend_interface"].send_frame_to_ai_server(frame)
-        _record_timing(selected, timings)
+def _mjpeg_frames():
+    """Blocking generator: captures frames, runs inference when enabled, yields MJPEG parts."""
+    state.ensure_camera()
+    assert state.cap is not None
 
-        fps = 1000 / timings["total_ms"] if timings.get("total_ms", 0) > 0 else 0
+    while True:
+        ret, frame = state.cap.read()
+        if not ret:
+            logger.warning("Failed to capture frame")
+            time.sleep(0.01)
+            continue
 
-        if len(st.session_state["bench_results"][selected]["total_ms"]) % STATS_REFRESH_EVERY_N_FRAMES == 0:
-            _render_stats(stats_placeholder)
+        # Snapshot the backend under the lock so a swap mid-send never races.
+        with state.lock:
+            active_backend = state.backend
+            active_transport = state.active_transport
+            infer = state.infer
 
-        if detection_results_single is not None:
-            TEXT_MESSAGE.text(detection_results_single)
+        if infer and active_backend is not None and active_transport is not None:
+            detections, timings = active_backend.send_frame_to_ai_server(frame)
+            state.record_timing(active_transport, timings)
+            fps = 1000 / timings["total_ms"] if timings.get("total_ms", 0) > 0 else 0
+            if detections is not None:
+                frame = draw_detections(frame, detections)
+                frame = draw_fps(frame, fps)
 
-            frame = draw_detections(frame, detection_results_single)
-            frame = draw_fps(frame, fps)
-        else:
-            TEXT_MESSAGE.text("Failed to get detection results")
+        ok, buf = cv2.imencode(".jpg", frame)
+        if not ok:
+            continue
+        jpg = buf.tobytes()
+        yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpg + b"\r\n"
 
-    FRAME_WINDOW.image(frame, channels="BGR")
+
+@app.get("/video_feed")
+def video_feed():
+    return StreamingResponse(_mjpeg_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=UI_PORT)
