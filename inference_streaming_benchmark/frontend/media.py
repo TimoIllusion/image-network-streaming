@@ -1,24 +1,5 @@
-import threading
-
 import cv2
 import numpy as np
-
-# Create a lock to manage access to the camera
-lock = threading.Lock()
-
-
-def generate_frames():
-    with lock:
-        camera = cv2.VideoCapture(0)
-        while True:
-            success, frame = camera.read()
-            if not success:
-                break
-            else:
-                ret, buffer = cv2.imencode(".jpg", frame)
-                frame = buffer.tobytes()
-                yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
-        camera.release()
 
 
 def draw_detections(img: np.ndarray, detections: list[dict]):

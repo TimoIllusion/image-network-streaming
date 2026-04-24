@@ -46,7 +46,7 @@ To start all four at once: `./scripts/run_all_backends.sh` (Ctrl+C stops them al
 ```bash
 python backend_http_multipart.py
 
-streamlit run frontend.py
+python frontend.py
 
 http://127.0.0.1:8501
 ```
@@ -58,7 +58,7 @@ http://127.0.0.1:8501
 ```bash
 python backend_zmq.py
 
-streamlit run frontend.py
+python frontend.py
 
 http://127.0.0.1:8501
 ```
@@ -70,7 +70,7 @@ http://127.0.0.1:8501
 ```bash
 python backend_imagezmq.py
 
-streamlit run frontend.py
+python frontend.py
 
 http://127.0.0.1:8501
 ```
@@ -82,7 +82,7 @@ http://127.0.0.1:8501
 ```bash
 python backend_grpc.py
 
-streamlit run frontend.py
+python frontend.py
 
 http://127.0.0.1:8501
 ```
@@ -117,7 +117,7 @@ docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all -p 5556:5556 infer
 
 - [x] Dockerize ai server
 - [x] Rename "fastapi" backend to a more descriptive label (e.g. `pure-http-multipart`) that reflects the protocol rather than the framework
-- [ ] Replace Streamlit frontend with Flask or a comparable lightweight framework for better control and lower overhead
+- [x] Replace Streamlit frontend with Flask or a comparable lightweight framework for better control and lower overhead
 - [ ] Improve benchmark statistics: add a dedicated "transmission time" column that excludes inference and preprocessing (encode + decode) so pure transport overhead is isolated
 
 ## AI Assistance
