@@ -112,6 +112,12 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 - [x] Rename "fastapi" backend to a more descriptive label (e.g. `pure-http-multipart`) that reflects the protocol rather than the framework
 - [x] Replace Streamlit frontend with Flask or a comparable lightweight framework for better control and lower overhead
 - [x] Improve benchmark statistics: add a dedicated "transmission time" column that excludes inference and preprocessing (encode + decode) so pure transport overhead is isolated
+- [ ] Extract a shared `FastAPITransport` base for the duplicated uvicorn lifecycle and `_infer` closure in `http_multipart` and `websocket`
+- [ ] Centralize raw payload codec and `FRAME_SHAPE` in one module (currently redeclared in 4 transport files)
+- [ ] Drop the `*_Raw` subclass pattern in favor of codec injection at registration time
+- [ ] Split `frontend.py` into a `frontend/` package (camera, mjpeg, state, app)
+- [ ] Decompose `FrontendState` into camera, transport-session, and benchmark-collector responsibilities
+- [ ] Consolidate ports/hosts into a single env-driven config module
 
 ## AI Assistance
 
