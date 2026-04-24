@@ -10,5 +10,6 @@ from . import (  # noqa: F401 — import triggers registration
     http_multipart,
     imagezmq,
     registry,  # noqa: F401 — re-exported for convenience
+    websocket,
     zmq,
 )

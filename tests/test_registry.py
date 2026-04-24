@@ -4,7 +4,16 @@ def test_registry_populated_by_barrel_import():
     from inference_streaming_benchmark.transports import registry
 
     names = set(registry.all_transports())
-    assert names == {"http_multipart", "zmq", "imagezmq", "grpc"}
+    assert names == {
+        "http_multipart",
+        "http_multipart_raw",
+        "zmq",
+        "zmq_raw",
+        "websocket",
+        "websocket_raw",
+        "imagezmq",
+        "grpc",
+    }
 
 
 def test_registry_get_returns_transport_class():

@@ -12,11 +12,15 @@ from inference_streaming_benchmark.logging import logger
 
 from ..base import Handler, Transport
 
+# Raw payload shape — kept in sync with grpc/transport.py:38 and frontend.py:_open_camera.
+_RAW_SHAPE = (1080, 1920, 3)
+
 
 class ZMQTransport(Transport):
     name = "zmq"
     display_name = "ZeroMQ REQ/REP (JPEG)"
     default_port = 5555
+    RAW = False
 
     def __init__(self):
         # server state
@@ -38,15 +42,21 @@ class ZMQTransport(Transport):
         # Short poll window so we can observe stop_event promptly.
         self._server_socket.RCVTIMEO = 100
 
+        raw = self.RAW
+        log_name = self.name
+
         def _serve():
-            logger.info(f"zmq transport listening on tcp://*:{port}")
+            logger.info(f"{log_name} transport listening on tcp://*:{port}")
             while not self._stop_event.is_set():
                 try:
                     image_data = self._server_socket.recv()
                 except zmq.Again:
                     continue
                 t0 = time.perf_counter()
-                image = decode_jpeg_bytes(image_data)
+                if raw:
+                    image = np.frombuffer(image_data, dtype=np.uint8).reshape(_RAW_SHAPE)
+                else:
+                    image = decode_jpeg_bytes(image_data)
                 decode_ms = (time.perf_counter() - t0) * 1000
                 detections, timings = handler(image)
                 timings["decode_ms"] = decode_ms
@@ -80,10 +90,14 @@ class ZMQTransport(Transport):
         t_total = time.perf_counter()
 
         t0 = time.perf_counter()
-        _, buffer = cv2.imencode(".jpg", frame)
+        if self.RAW:
+            payload = frame.tobytes()
+        else:
+            _, buffer = cv2.imencode(".jpg", frame)
+            payload = buffer.tobytes()
         timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
-        self._client_socket.send(buffer)
+        self._client_socket.send(payload)
         response = self._client_socket.recv_json()
         timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
@@ -97,3 +111,10 @@ class ZMQTransport(Transport):
             self._client_ctx.term()
         self._client_socket = None
         self._client_ctx = None
+
+
+class ZMQRawTransport(ZMQTransport):
+    name = "zmq_raw"
+    display_name = "ZeroMQ REQ/REP (raw ndarray)"
+    default_port = 5557
+    RAW = True
