@@ -2,14 +2,12 @@ import os
 
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 
-import math
 import statistics
 import threading
 import time
 from pathlib import Path
 
 import cv2
-import numpy as np
 import requests
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -37,27 +35,31 @@ TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "
 STATIC_DIR = Path(__file__).parent / "inference_streaming_benchmark" / "frontend" / "static"
 
 
-class _FakeVideoCapture:
-    """Synthesized 1920×1080 BGR frames for Claude-driven smoke tests.
+_MOCK_IMAGE_PATH = Path(__file__).parent / "resources" / "example_dall_e.png"
 
-    Enabled by MOCK_CAMERA=1. Produces an animated moving color block plus a
-    timestamp overlay at ~30fps, matching a real VideoCapture's (True, ndarray)
-    return shape.
+
+class _FakeVideoCapture:
+    """Static 1920×1080 BGR frames for Claude-driven smoke tests.
+
+    Enabled by MOCK_CAMERA=1. Returns the resources/example_dall_e.png image
+    (resized to 1920×1080) with a timestamp overlay at ~30fps. The image
+    contains people, chairs, a dining table, and a laptop so YOLO produces
+    real detections that exercise draw_detections.
     """
 
     def __init__(self):
         self._t0 = time.time()
         self._released = False
+        img = cv2.imread(str(_MOCK_IMAGE_PATH))
+        if img is None:
+            raise RuntimeError(f"MOCK_CAMERA: could not load {_MOCK_IMAGE_PATH}")
+        self._base = cv2.resize(img, (1920, 1080))
 
     def read(self):
         if self._released:
             return False, None
-        h, w = 1080, 1920
-        frame = np.full((h, w, 3), 50, dtype=np.uint8)
+        frame = self._base.copy()
         elapsed = time.time() - self._t0
-        x = int((math.sin(elapsed) * 0.5 + 0.5) * (w - 200))
-        y = int((math.cos(elapsed * 0.7) * 0.5 + 0.5) * (h - 200))
-        frame[y : y + 200, x : x + 200] = (0, 165, 255)
         cv2.putText(
             frame,
             f"MOCK t={elapsed:.1f}s",
