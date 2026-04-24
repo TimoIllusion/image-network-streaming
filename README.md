@@ -32,66 +32,33 @@ pip install -e ".[dev,test]"
 
 ## Run
 
->Note: Each backend binds its own data port plus a small HTTP sidecar used by the frontend as a status indicator. You can run any subset (or all) of the backends at once — the frontend dropdown shows which are online.
-
-| Transport      | Data port | Sidecar port |
-| -------------- | --------- | ------------ |
-| http_multipart | 8008      | 9001         |
-| zmq            | 5555      | 9002         |
-| imagezmq       | 5556      | 9003         |
-| grpc           | 50051     | 9004         |
-
-To start all four at once: `./scripts/run_all_backends.sh` (Ctrl+C stops them all).
-
-**Using HTTP multipart (FastAPI + multipart/form-data) for communication**
-
->Note: The order of starting is important!
+One AI server process hosts every transport. The frontend picks which protocol is active; the server hot-swaps listeners on demand. Exactly one transport is active at any time.
 
 ```bash
-python backend_http_multipart.py
-
-python frontend.py
-
-http://127.0.0.1:8501
+python serve.py        # control plane on :9000, http_multipart active by default
+python frontend.py     # http://127.0.0.1:8501 (webcam UI, backend dropdown)
 ```
 
-**Using ZMQ for communication**
+Options:
+- `python serve.py --default zmq` — start with `zmq` active
+- `python serve.py --default none` — idle until the frontend picks a transport
 
->Note: The order of starting is important!
-
-```bash
-python backend_zmq.py
-
-python frontend.py
-
-http://127.0.0.1:8501
-```
-
-**Using ImageZMQ for communication**
-
->Note: The order of starting is important!
-
-```bash
-python backend_imagezmq.py
-
-python frontend.py
-
-http://127.0.0.1:8501
-```
-
-**Using GRPC for communication**
-
->Note: The order of starting is important!
-
-```bash
-python backend_grpc.py
-
-python frontend.py
-
-http://127.0.0.1:8501
-```
+| Transport      | Port  | Description                       |
+| -------------- | ----- | --------------------------------- |
+| http_multipart | 8008  | FastAPI + multipart/form-data     |
+| zmq            | 5555  | ZeroMQ REQ/REP + JPEG             |
+| imagezmq       | 5556  | ImageZMQ + raw ndarray            |
+| grpc           | 50051 | gRPC unary + raw ndarray bytes    |
 
 >Note: transfer speed for images can be significantly boosted by resizing them before sending. This will usually not cause issues with the ai model, since most models need images of low input sizes like 224x224.
+
+### Adding a new transport
+
+1. Create `inference_streaming_benchmark/transports/<name>/transport.py` with a `class XxxTransport(Transport)` implementing `start` / `stop` / `connect` / `send` / `disconnect`.
+2. In `inference_streaming_benchmark/transports/<name>/__init__.py`, add `register(XxxTransport)`.
+3. Add `from . import <name>` to `inference_streaming_benchmark/transports/__init__.py`.
+
+That's it — the frontend dropdown and server control plane pick it up automatically.
 
 ## Tests
 
