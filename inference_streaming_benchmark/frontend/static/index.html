@@ -134,6 +134,7 @@
         align-items: center;
         justify-content: center;
         box-shadow: var(--shadow);
+        margin-bottom: 1rem;
       }
       #video { width: 100%; height: 100%; object-fit: contain; display: block; }
     </style>
@@ -144,6 +145,10 @@
         <h1>Webcam Object Detection</h1>
         <p class="subtitle">Benchmarking image transmission + inference across transports</p>
       </header>
+
+      <div class="video-wrap">
+        <img id="video" src="/video_feed" alt="live webcam feed" />
+      </div>
 
       <div class="card">
         <div class="controls">
@@ -161,10 +166,6 @@
 
       <div class="card">
         <div id="stats"></div>
-      </div>
-
-      <div class="video-wrap">
-        <img id="video" src="/video_feed" alt="live webcam feed" />
       </div>
     </div>
 
