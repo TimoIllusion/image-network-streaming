@@ -14,14 +14,18 @@ Results for 1920×1080 images on a MacBook Pro M2 Pro (YOLOv8n, MPS inference):
 
 ## Setup
 
-Requirements: Python 3.10+ with pip and venv available. Using *uv* for easy and fast python env setup is recommended.
+Requirements: Python 3.10+. [uv](https://docs.astral.sh/uv/) is recommended — it reads `pyproject.toml` and `uv.lock` for a reproducible install.
 
 ```bash
 git clone https://github.com/TimoIllusion/inference-streaming-benchmark.git
 cd inference-streaming-benchmark
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
+
+# Recommended (uv, locked via uv.lock):
+uv sync --all-extras
+
+# Or classic pip:
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev,test]"
 ```
 
 >Note: Install torch with the respective hardware acceleration, e.g. CUDA to increase inference speed.
