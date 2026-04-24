@@ -3,6 +3,7 @@ from __future__ import annotations
 import socket
 import threading
 import time
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -75,7 +76,12 @@ class SwitchBody(BaseModel):
 
 
 def build_control_app(server: Server) -> FastAPI:
-    app = FastAPI()
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        yield
+        server.stop()
+
+    app = FastAPI(lifespan=lifespan)
 
     @app.get("/health")
     def health():
@@ -116,11 +122,6 @@ def run(default: str | None = "http_multipart") -> None:
         server.switch(default)
 
     app = build_control_app(server)
-
-    def _shutdown():
-        server.stop()
-
-    app.add_event_handler("shutdown", _shutdown)
 
     logger.info(f"control plane on http://0.0.0.0:{CONTROL_PORT}")
     uvicorn.run(app, host="0.0.0.0", port=CONTROL_PORT, log_level="warning")
