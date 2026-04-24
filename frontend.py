@@ -2,12 +2,14 @@ import os
 
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 
+import math
 import statistics
 import threading
 import time
 from pathlib import Path
 
 import cv2
+import numpy as np
 import requests
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -35,6 +37,57 @@ TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "
 STATIC_DIR = Path(__file__).parent / "inference_streaming_benchmark" / "frontend" / "static"
 
 
+class _FakeVideoCapture:
+    """Synthesized 1920×1080 BGR frames for Claude-driven smoke tests.
+
+    Enabled by MOCK_CAMERA=1. Produces an animated moving color block plus a
+    timestamp overlay at ~30fps, matching a real VideoCapture's (True, ndarray)
+    return shape.
+    """
+
+    def __init__(self):
+        self._t0 = time.time()
+        self._released = False
+
+    def read(self):
+        if self._released:
+            return False, None
+        h, w = 1080, 1920
+        frame = np.full((h, w, 3), 50, dtype=np.uint8)
+        elapsed = time.time() - self._t0
+        x = int((math.sin(elapsed) * 0.5 + 0.5) * (w - 200))
+        y = int((math.cos(elapsed * 0.7) * 0.5 + 0.5) * (h - 200))
+        frame[y : y + 200, x : x + 200] = (0, 165, 255)
+        cv2.putText(
+            frame,
+            f"MOCK t={elapsed:.1f}s",
+            (50, 80),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.5,
+            (255, 255, 255),
+            3,
+            cv2.LINE_AA,
+        )
+        time.sleep(1 / 30)
+        return True, frame
+
+    def set(self, *_args, **_kwargs):
+        pass
+
+    def release(self):
+        self._released = True
+
+
+def _open_camera():
+    if os.environ.get("MOCK_CAMERA") == "1":
+        logger.info("MOCK_CAMERA=1 — using synthesized frame source")
+        return _FakeVideoCapture()
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    return cap
+
+
 class FrontendState:
     """Shared between the MJPEG generator and the control endpoints.
 
@@ -52,10 +105,7 @@ class FrontendState:
     def ensure_camera(self):
         if self.cap is None:
             logger.info("Start camera initialization")
-            cap = cv2.VideoCapture(0)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-            self.cap = cap
+            self.cap = _open_camera()
             logger.info("Camera initialized")
 
     def set_control(self, transport_name: str, infer: bool) -> None:
