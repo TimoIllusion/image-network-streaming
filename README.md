@@ -4,12 +4,12 @@ Comparison implementation for image transmission and inference response using an
 
 Results for 1920×1080 images on a MacBook Pro M2 Pro (YOLOv8n, MPS inference):
 
-| Backend                  | Transmission (ms) | Inference (ms) | Total (ms) |
-| ------------------------ | ----------------- | -------------- | ---------- |
-| ImageZMQ                 | 3.4               | 19.8           | 23.1       |
-| ZMQ                      | 8.3               | 19.6           | 32.9       |
-| gRPC                     | 9.3               | 19.7           | 29.3       |
-| HTTP multipart (FastAPI) | 10.9              | 19.2           | 34.6       |
+| Backend        | Transmission (ms) | Inference (ms) | Total (ms) |
+| -------------- | ----------------- | -------------- | ---------- |
+| imagezmq       | 4.3               | 23.6           | 28.4       |
+| grpc           | 11.0              | 27.1           | 37.9       |
+| zmq            | 17.5              | 37.8           | 55.7       |
+| http_multipart | 20.6              | 38.9           | 58.9       |
 
 
 ## Setup
