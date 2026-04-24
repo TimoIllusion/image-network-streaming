@@ -4,12 +4,16 @@ Comparison implementation for image transmission and inference response using an
 
 Results for 1920×1080 images on a MacBook Pro M2 Pro (YOLOv8n, MPS inference):
 
-| Backend        | Transmission (ms) | Inference (ms) | Total (ms) |
-| -------------- | ----------------- | -------------- | ---------- |
-| imagezmq       | 4.3               | 23.6           | 28.4       |
-| grpc           | 11.0              | 27.1           | 37.9       |
-| zmq            | 17.5              | 37.8           | 55.7       |
-| http_multipart | 20.6              | 38.9           | 58.9       |
+| BACKEND             | ENCODE (MS) | DECODE (MS) | INFER (MS) | POST (MS) | COMMS (MS) | TOTAL (MS) | TOTAL W/O INFER (MS) |
+|---------------------|-------------|-------------|------------|-----------|------------|------------|----------------------|
+| imagezmq            | 0.0         | 0.0         | 25.5       | 1.6       | 3.0        | 30.3       | 4.6                  |
+| zmq_raw             | 0.3         | 0.0         | 25.2       | 1.1       | 3.5        | 30.1       | 5.0                  |
+| http_multipart_raw  | 0.2         | 0.0         | 24.3       | 1.7       | 7.8        | 34.3       | 9.9                  |
+| grpc                | 0.2         | 0.4         | 24.3       | 1.2       | 9.2        | 35.5       | 11.1                 |
+| zmq                 | 5.7         | 9.0         | 24.3       | 1.2       | 0.8        | 41.2       | 16.8                 |
+| http_multipart      | 5.8         | 8.8         | 23.1       | 1.0       | 3.5        | 42.3       | 19.3                 |
+| websocket           | 5.8         | 8.8         | 22.9       | 0.9       | 16.7       | 55.1       | 32.3                 |
+| websocket_raw       | 0.2         | 0.0         | 23.5       | 1.0       | 166.0      | 191.0      | 167.3                |
 
 
 ## Setup
