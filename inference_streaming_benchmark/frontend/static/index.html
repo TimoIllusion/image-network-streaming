@@ -2,34 +2,171 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Webcam Object Detection</title>
     <style>
-      body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 1200px; }
-      h1 { margin-top: 0; }
-      .controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
-      select, button, label { font-size: 1rem; }
-      select:disabled { color: #888; }
-      table { border-collapse: collapse; margin: 0.5rem 0 1rem; font-variant-numeric: tabular-nums; }
-      th, td { border: 1px solid #ccc; padding: 0.25rem 0.5rem; text-align: right; }
-      th:first-child, td:first-child { text-align: left; }
-      #video { width: 100%; max-width: 960px; background: #000; }
-      .hint { color: #666; font-style: italic; }
+      :root {
+        --bg: #f7f5f2;
+        --surface: #ffffff;
+        --fg: #1c1917;
+        --muted: #78716c;
+        --border: #e7e5e4;
+        --accent: #d97706;
+        --accent-hover: #b45309;
+        --radius: 10px;
+        --shadow: 0 1px 2px rgba(28, 25, 23, 0.04), 0 6px 20px rgba(28, 25, 23, 0.05);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        padding: 2rem 1.5rem 3rem;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.5;
+        font-feature-settings: "tnum", "ss01";
+      }
+
+      .container { max-width: 1100px; margin: 0 auto; }
+
+      header { margin-bottom: 1.5rem; display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
+      h1 {
+        margin: 0;
+        font-size: 1.75rem;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      .subtitle { color: var(--muted); margin: 0; font-size: 0.95rem; }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: var(--shadow);
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.5rem;
+        align-items: center;
+      }
+      .control-group { display: flex; align-items: center; gap: 0.5rem; }
+      .control-group > label { font-weight: 500; color: var(--fg); font-size: 0.9rem; }
+
+      select, button {
+        font: inherit;
+        font-size: 0.9rem;
+        color: var(--fg);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.4rem 0.75rem;
+        cursor: pointer;
+        transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+      }
+      select:hover, button:hover { border-color: var(--muted); }
+      select:focus-visible, button:focus-visible, input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      select:disabled { color: var(--muted); background: var(--bg); cursor: not-allowed; border-style: dashed; }
+
+      #clear {
+        margin-left: auto;
+        color: var(--accent);
+        border-color: var(--accent);
+        background: transparent;
+      }
+      #clear:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+      input[type="checkbox"] {
+        width: 1rem;
+        height: 1rem;
+        margin: 0;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      #stats table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+      }
+      #stats thead th {
+        text-align: right;
+        padding: 0.55rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        font-weight: 600;
+        color: var(--muted);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+      }
+      #stats thead th:first-child { text-align: left; }
+      #stats tbody td {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        text-align: right;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      #stats tbody td:first-child {
+        text-align: left;
+        font-family: inherit;
+        font-weight: 500;
+      }
+      #stats tbody tr:last-child td { border-bottom: none; }
+      .hint { color: var(--muted); font-style: italic; margin: 0; }
+
+      .video-wrap {
+        background: #0a0a0a;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        aspect-ratio: 16 / 9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: var(--shadow);
+      }
+      #video { width: 100%; height: 100%; object-fit: contain; display: block; }
     </style>
   </head>
   <body>
-    <h1>Webcam Object Detection</h1>
+    <div class="container">
+      <header>
+        <h1>Webcam Object Detection</h1>
+        <p class="subtitle">Benchmarking image transmission + inference across transports</p>
+      </header>
 
-    <div class="controls">
-      <label>Backend: <select id="backend"></select></label>
-      <label><input type="checkbox" id="infer" /> Enable object detection</label>
-      <button id="clear">Clear results</button>
+      <div class="card">
+        <div class="controls">
+          <div class="control-group">
+            <label for="backend">Backend</label>
+            <select id="backend"></select>
+          </div>
+          <div class="control-group">
+            <input type="checkbox" id="infer" />
+            <label for="infer">Enable object detection</label>
+          </div>
+          <button id="clear">Clear results</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="stats"></div>
+      </div>
+
+      <div class="video-wrap">
+        <img id="video" src="/video_feed" alt="live webcam feed" />
+      </div>
     </div>
-
-    <div id="stats-wrap">
-      <div id="stats"></div>
-    </div>
-
-    <img id="video" src="/video_feed" alt="live webcam feed" />
 
     <script src="/static/app.js"></script>
   </body>
