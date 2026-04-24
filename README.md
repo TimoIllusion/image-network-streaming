@@ -136,7 +136,7 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 - [x] Dockerize ai server
 - [x] Rename "fastapi" backend to a more descriptive label (e.g. `pure-http-multipart`) that reflects the protocol rather than the framework
 - [x] Replace Streamlit frontend with Flask or a comparable lightweight framework for better control and lower overhead
-- [ ] Improve benchmark statistics: add a dedicated "transmission time" column that excludes inference and preprocessing (encode + decode) so pure transport overhead is isolated
+- [x] Improve benchmark statistics: add a dedicated "transmission time" column that excludes inference and preprocessing (encode + decode) so pure transport overhead is isolated
 
 ## AI Assistance
 
