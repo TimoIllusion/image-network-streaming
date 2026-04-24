@@ -29,8 +29,8 @@ STATUS_CACHE_TTL_S = 3.0
 STATS_REFRESH_EVERY_N_FRAMES = 5
 
 # Columns we collect per frame and show as medians in the stats table.
-# transmission_ms = total - encode - infer: pure protocol overhead (network + server framing)
-# without client encoding or AI inference, useful for comparing transport protocols.
+# transmission_ms = total - infer: end-to-end cost excluding only AI inference,
+# useful for comparing transport protocols (includes encode/decode/comms/post).
 TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "transmission_ms", "total_ms")
 
 
@@ -77,8 +77,8 @@ def _record_timing(backend: str, timings: dict) -> None:
     # comms = pure network transit (total minus all endpoint processing)
     server_ms = timings.get("decode_ms", 0.0) + timings.get("infer_ms", 0.0) + timings.get("post_ms", 0.0)
     comms_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("encode_ms", 0.0) - server_ms)
-    # transmission = protocol overhead without AI inference or client encoding (decode + comms + post)
-    transmission_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("encode_ms", 0.0) - timings.get("infer_ms", 0.0))
+    # transmission = everything but AI inference (encode + decode + comms + post)
+    transmission_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("infer_ms", 0.0))
     timings = {**timings, "comms_ms": comms_ms, "transmission_ms": transmission_ms}
 
     bench = st.session_state["bench_results"].setdefault(backend, {"active_time_s": 0.0, **{col: [] for col in TIMING_COLUMNS}})
