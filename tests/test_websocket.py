@@ -11,10 +11,14 @@ from inference_streaming_benchmark.transports.websocket.transport import WebSock
 WebSocketRawTransport = registry.get("websocket_raw")
 
 
-@pytest.mark.parametrize("cls,port", [
-    (WebSocketTransport, 19099),
-    (WebSocketRawTransport, 19100),
-], ids=["jpeg", "raw"])
+@pytest.mark.parametrize(
+    "cls,port",
+    [
+        (WebSocketTransport, 19099),
+        (WebSocketRawTransport, 19100),
+    ],
+    ids=["jpeg", "raw"],
+)
 def test_end_to_end(cls, port, monkeypatch):
     fake_detections = [[{"box": {"x1": 10, "y1": 20, "x2": 30, "y2": 40}, "confidence": 0.99, "class": 0, "name": "object"}]]
 
