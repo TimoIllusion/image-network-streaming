@@ -110,6 +110,8 @@ class BenchmarkCollector:
             }
             for col in TIMING_COLUMNS:
                 samples = data[col]
-                row[col.replace("_ms", " (ms)")] = f"{statistics.median(samples):.1f}" if samples else "-"
+                abbrevs = {"transmission_ms": "trans (ms)", "encode_ms": "enc (ms)", "decode_ms": "dec (ms)"}
+                label = abbrevs.get(col, col.replace("_ms", " (ms)"))
+                row[label] = f"{statistics.median(samples):.1f}" if samples else "-"
             rows.append(row)
         return rows

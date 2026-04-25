@@ -5,6 +5,17 @@ const backendSelect = document.getElementById("backend");
 const inferCheckbox = document.getElementById("infer");
 const clearButton = document.getElementById("clear");
 const statsDiv = document.getElementById("stats");
+const statusDot = document.getElementById("statusDot");
+const statusLabel = document.getElementById("statusLabel");
+
+function updateStatusOverlay() {
+  const backend = backendSelect.value;
+  const live = inferCheckbox.checked && !!backend;
+  statusDot.className = "status-dot" + (live ? " live" : "");
+  statusLabel.textContent = backend
+    ? `${backend} · ${live ? "detecting" : "idle"}`
+    : "no backend selected";
+}
 
 async function postControl() {
   await fetch("/api/control", {
@@ -15,6 +26,7 @@ async function postControl() {
       infer: inferCheckbox.checked,
     }),
   });
+  updateStatusOverlay();
 }
 
 async function refreshStatus() {
@@ -25,7 +37,7 @@ async function refreshStatus() {
   for (const [name, online] of Object.entries(statuses)) {
     const opt = document.createElement("option");
     opt.value = name;
-    opt.textContent = online ? `${name} ✅` : `${name} ❌ offline`;
+    opt.textContent = online ? name : `${name} · offline`;
     opt.disabled = !online;
     backendSelect.appendChild(opt);
   }
@@ -36,6 +48,7 @@ async function refreshStatus() {
     const firstOnline = Object.entries(statuses).find(([, ok]) => ok);
     if (firstOnline) backendSelect.value = firstOnline[0];
   }
+  updateStatusOverlay();
 }
 
 async function refreshStats() {
