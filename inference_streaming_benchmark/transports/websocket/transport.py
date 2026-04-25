@@ -27,6 +27,12 @@ class WebSocketTransport(Transport):
         self._server = None  # websockets.sync.server.Server
         self._server_thread: threading.Thread | None = None
         self._ws: ClientConnection | None = None
+        # Serializes send/recv on the persistent connection. websockets.sync raises
+        # "cannot call recv concurrently" if two threads race; without this lock the
+        # losing thread's response gets queued and consumed by a *later* call,
+        # making total_ms appear ~0 while server timings are stale (infer/decode are
+        # from a previous frame). The fix matches ZMQ REQ/REP's natural strictness.
+        self._lock = threading.Lock()
 
     # ----- server role -----
 
@@ -77,22 +83,23 @@ class WebSocketTransport(Transport):
     def send(self, frame: np.ndarray):
         assert self._ws is not None, "connect() first"
         timings: dict[str, float] = {}
-        try:
-            t_total = time.perf_counter()
-            t0 = time.perf_counter()
-            payload = encode(frame, raw=self.RAW)
-            timings["encode_ms"] = (time.perf_counter() - t0) * 1000
+        with self._lock:
+            try:
+                t_total = time.perf_counter()
+                t0 = time.perf_counter()
+                payload = encode(frame, raw=self.RAW)
+                timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
-            self._ws.send(payload)
-            response = self._ws.recv()
-            timings["total_ms"] = (time.perf_counter() - t_total) * 1000
+                self._ws.send(payload)
+                response = self._ws.recv()
+                timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
-            detections, server_timings = unpack(json.loads(response))
-            timings.update(server_timings)
-            return detections, timings
-        except Exception as e:
-            logger.error(f"{self.name} send failed: {e}")
-            return None, timings
+                detections, server_timings = unpack(json.loads(response))
+                timings.update(server_timings)
+                return detections, timings
+            except Exception as e:
+                logger.error(f"{self.name} send failed: {e}")
+                return None, timings
 
     def disconnect(self) -> None:
         if self._ws is not None:
