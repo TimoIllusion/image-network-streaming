@@ -113,10 +113,3 @@ class HTTPMultipartTransport(FastAPITransport):
             self._session.close()
             self._session = None
         self._url = None
-
-
-class HTTPMultipartRawTransport(HTTPMultipartTransport):
-    name = "http_multipart_raw"
-    display_name = "HTTP raw (FastAPI, ndarray)"
-    default_port = 8010
-    RAW = True

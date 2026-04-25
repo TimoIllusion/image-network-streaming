@@ -9,10 +9,11 @@ pytest.importorskip("PIL")
 import numpy as np  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from inference_streaming_benchmark.transports.websocket.transport import (  # noqa: E402
-    WebSocketRawTransport,
-    WebSocketTransport,
-)
+from inference_streaming_benchmark import transports as _transports  # noqa: E402, F401 — triggers registration
+from inference_streaming_benchmark.transports import registry  # noqa: E402
+from inference_streaming_benchmark.transports.websocket.transport import WebSocketTransport  # noqa: E402
+
+WebSocketRawTransport = registry.get("websocket_raw")
 
 
 def _jpeg_bytes() -> bytes:

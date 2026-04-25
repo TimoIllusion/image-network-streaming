@@ -96,10 +96,3 @@ class WebSocketTransport(FastAPITransport):
             except Exception:
                 logger.exception(f"{self.name} disconnect failed")
             self._ws = None
-
-
-class WebSocketRawTransport(WebSocketTransport):
-    name = "websocket_raw"
-    display_name = "WebSocket raw (FastAPI, ndarray)"
-    default_port = 8011
-    RAW = True

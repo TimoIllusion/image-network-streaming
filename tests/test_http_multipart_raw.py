@@ -6,9 +6,10 @@ pytest.importorskip("numpy")
 import numpy as np  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from inference_streaming_benchmark.transports.http_multipart.transport import (  # noqa: E402
-    HTTPMultipartRawTransport,
-)
+from inference_streaming_benchmark import transports as _transports  # noqa: E402, F401 — triggers registration
+from inference_streaming_benchmark.transports import registry  # noqa: E402
+
+HTTPMultipartRawTransport = registry.get("http_multipart_raw")
 
 
 def test_end_to_end_raw(monkeypatch):

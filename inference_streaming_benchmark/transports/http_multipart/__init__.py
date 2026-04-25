@@ -1,5 +1,11 @@
 from ..registry import register
-from .transport import HTTPMultipartRawTransport, HTTPMultipartTransport
+from .transport import HTTPMultipartTransport
 
 register(HTTPMultipartTransport)
-register(HTTPMultipartRawTransport)
+register(
+    HTTPMultipartTransport,
+    name="http_multipart_raw",
+    display_name="HTTP raw (FastAPI, ndarray)",
+    port=8010,
+    raw=True,
+)

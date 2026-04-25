@@ -100,10 +100,3 @@ class ZMQTransport(Transport):
             self._client_ctx.term()
         self._client_socket = None
         self._client_ctx = None
-
-
-class ZMQRawTransport(ZMQTransport):
-    name = "zmq_raw"
-    display_name = "ZeroMQ REQ/REP (raw ndarray)"
-    default_port = 5557
-    RAW = True
