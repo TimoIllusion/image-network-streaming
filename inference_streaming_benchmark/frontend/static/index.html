@@ -84,6 +84,14 @@
       }
       #clear:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+      #copyMd {
+        color: var(--muted);
+        border-color: var(--border);
+        background: transparent;
+      }
+      #copyMd:hover { border-color: var(--muted); color: var(--fg); }
+      #copyMd.copied { color: #16a34a; border-color: #16a34a; }
+
       /* Toggle switch */
       .toggle { position: relative; display: inline-block; width: 2.25rem; height: 1.25rem; flex-shrink: 0; }
       .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
@@ -207,6 +215,7 @@
             <label for="infer">Object detection</label>
           </div>
           <button id="clear">Clear results</button>
+          <button id="copyMd">Copy as Markdown</button>
         </div>
       </div>
 
@@ -215,6 +224,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2"></script>
   </body>
 </html>
