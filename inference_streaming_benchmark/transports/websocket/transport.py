@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import json
-import threading
 import time
 
 import numpy as np
-import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from websockets.sync.client import ClientConnection
@@ -13,19 +11,19 @@ from websockets.sync.client import connect as ws_connect
 
 from inference_streaming_benchmark.logging import logger
 
-from ..base import Handler, Transport
+from .._fastapi_base import FastAPITransport
+from ..base import Handler
 from ..codec import decode, encode
 
 
-class WebSocketTransport(Transport):
+class WebSocketTransport(FastAPITransport):
     name = "websocket"
     display_name = "WebSocket (FastAPI)"
     default_port = 8009
     RAW = False
 
     def __init__(self):
-        self._uvicorn_server: uvicorn.Server | None = None
-        self._listener_thread: threading.Thread | None = None
+        super().__init__()
         self._ws: ClientConnection | None = None
 
     # ----- server role -----
@@ -64,21 +62,6 @@ class WebSocketTransport(Transport):
                 logger.info(f"{log_name} websocket client disconnected")
 
         return app
-
-    def start(self, port: int, handler: Handler) -> None:
-        app = self.build_app(handler)
-        config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")
-        self._uvicorn_server = uvicorn.Server(config)
-        self._listener_thread = threading.Thread(target=self._uvicorn_server.run, daemon=True)
-        self._listener_thread.start()
-
-    def stop(self) -> None:
-        if self._uvicorn_server is not None:
-            self._uvicorn_server.should_exit = True
-        if self._listener_thread is not None:
-            self._listener_thread.join(timeout=5)
-        self._uvicorn_server = None
-        self._listener_thread = None
 
     # ----- client role -----
 
