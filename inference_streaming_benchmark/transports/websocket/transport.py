@@ -1,35 +1,30 @@
 from __future__ import annotations
 
 import json
-import threading
 import time
 
-import cv2
 import numpy as np
-import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from websockets.sync.client import ClientConnection
 from websockets.sync.client import connect as ws_connect
 
-from inference_streaming_benchmark.engine import decode_jpeg_bytes
 from inference_streaming_benchmark.logging import logger
 
-from ..base import Handler, Transport
+from .._fastapi_base import FastAPITransport
+from ..base import Handler
+from ..codec import decode, encode
+from ..envelope import build, unpack
 
-# Raw payload shape — kept in sync with grpc/transport.py:38 and frontend.py:_open_camera.
-_RAW_SHAPE = (1080, 1920, 3)
 
-
-class WebSocketTransport(Transport):
+class WebSocketTransport(FastAPITransport):
     name = "websocket"
     display_name = "WebSocket (FastAPI)"
     default_port = 8009
     RAW = False
 
     def __init__(self):
-        self._uvicorn_server: uvicorn.Server | None = None
-        self._listener_thread: threading.Thread | None = None
+        super().__init__()
         self._ws: ClientConnection | None = None
 
     # ----- server role -----
@@ -43,10 +38,7 @@ class WebSocketTransport(Transport):
 
         def _infer(data: bytes):
             t = time.perf_counter()
-            if raw:
-                image = np.frombuffer(data, dtype=np.uint8).reshape(_RAW_SHAPE)
-            else:
-                image = decode_jpeg_bytes(data)
+            image = decode(data, raw=raw)
             decode_ms = (time.perf_counter() - t) * 1000
             results, timings = handler(image)
             timings["decode_ms"] = decode_ms
@@ -61,7 +53,7 @@ class WebSocketTransport(Transport):
                     t0 = time.perf_counter()
                     data = await ws.receive_bytes()
                     results, timings = await run_in_threadpool(_infer, data)
-                    await ws.send_text(json.dumps({"batched_detections": results, "timings": timings}))
+                    await ws.send_text(json.dumps(build(results, timings)))
                     logger.info(
                         f"{log_name} total={(time.perf_counter() - t0) * 1000:.1f}ms "
                         f"decode={timings['decode_ms']:.1f}ms infer={timings['infer_ms']:.1f}ms "
@@ -71,21 +63,6 @@ class WebSocketTransport(Transport):
                 logger.info(f"{log_name} websocket client disconnected")
 
         return app
-
-    def start(self, port: int, handler: Handler) -> None:
-        app = self.build_app(handler)
-        config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")
-        self._uvicorn_server = uvicorn.Server(config)
-        self._listener_thread = threading.Thread(target=self._uvicorn_server.run, daemon=True)
-        self._listener_thread.start()
-
-    def stop(self) -> None:
-        if self._uvicorn_server is not None:
-            self._uvicorn_server.should_exit = True
-        if self._listener_thread is not None:
-            self._listener_thread.join(timeout=5)
-        self._uvicorn_server = None
-        self._listener_thread = None
 
     # ----- client role -----
 
@@ -99,20 +76,16 @@ class WebSocketTransport(Transport):
         try:
             t_total = time.perf_counter()
             t0 = time.perf_counter()
-            if self.RAW:
-                payload = frame.tobytes()
-            else:
-                _, encoded = cv2.imencode(".jpg", frame)
-                payload = encoded.tobytes()
+            payload = encode(frame, raw=self.RAW)
             timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
             self._ws.send(payload)
             response = self._ws.recv()
             timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
-            data = json.loads(response)
-            timings.update(data.get("timings", {}))
-            return data["batched_detections"][0], timings
+            detections, server_timings = unpack(json.loads(response))
+            timings.update(server_timings)
+            return detections, timings
         except Exception as e:
             logger.error(f"{self.name} send failed: {e}")
             return None, timings
@@ -124,10 +97,3 @@ class WebSocketTransport(Transport):
             except Exception:
                 logger.exception(f"{self.name} disconnect failed")
             self._ws = None
-
-
-class WebSocketRawTransport(WebSocketTransport):
-    name = "websocket_raw"
-    display_name = "WebSocket raw (FastAPI, ndarray)"
-    default_port = 8011
-    RAW = True

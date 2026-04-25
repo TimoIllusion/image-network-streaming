@@ -3,17 +3,14 @@ from __future__ import annotations
 import threading
 import time
 
-import cv2
 import numpy as np
 import zmq
 
-from inference_streaming_benchmark.engine import decode_jpeg_bytes
 from inference_streaming_benchmark.logging import logger
 
 from ..base import Handler, Transport
-
-# Raw payload shape — kept in sync with grpc/transport.py:38 and frontend.py:_open_camera.
-_RAW_SHAPE = (1080, 1920, 3)
+from ..codec import decode, encode
+from ..envelope import build, unpack
 
 
 class ZMQTransport(Transport):
@@ -53,14 +50,11 @@ class ZMQTransport(Transport):
                 except zmq.Again:
                     continue
                 t0 = time.perf_counter()
-                if raw:
-                    image = np.frombuffer(image_data, dtype=np.uint8).reshape(_RAW_SHAPE)
-                else:
-                    image = decode_jpeg_bytes(image_data)
+                image = decode(image_data, raw=raw)
                 decode_ms = (time.perf_counter() - t0) * 1000
                 detections, timings = handler(image)
                 timings["decode_ms"] = decode_ms
-                self._server_socket.send_json({"batched_detections": detections, "timings": timings})
+                self._server_socket.send_json(build(detections, timings))
 
         self._listener_thread = threading.Thread(target=_serve, daemon=True)
         self._listener_thread.start()
@@ -90,19 +84,16 @@ class ZMQTransport(Transport):
         t_total = time.perf_counter()
 
         t0 = time.perf_counter()
-        if self.RAW:
-            payload = frame.tobytes()
-        else:
-            _, buffer = cv2.imencode(".jpg", frame)
-            payload = buffer.tobytes()
+        payload = encode(frame, raw=self.RAW)
         timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
         self._client_socket.send(payload)
         response = self._client_socket.recv_json()
         timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
-        timings.update(response.get("timings", {}))
-        return response["batched_detections"][0], timings
+        detections, server_timings = unpack(response)
+        timings.update(server_timings)
+        return detections, timings
 
     def disconnect(self) -> None:
         if self._client_socket is not None:
@@ -111,10 +102,3 @@ class ZMQTransport(Transport):
             self._client_ctx.term()
         self._client_socket = None
         self._client_ctx = None
-
-
-class ZMQRawTransport(ZMQTransport):
-    name = "zmq_raw"
-    display_name = "ZeroMQ REQ/REP (raw ndarray)"
-    default_port = 5557
-    RAW = True

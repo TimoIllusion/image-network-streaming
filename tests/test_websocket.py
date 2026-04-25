@@ -9,10 +9,11 @@ pytest.importorskip("PIL")
 import numpy as np  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from inference_streaming_benchmark.transports.websocket.transport import (  # noqa: E402
-    WebSocketRawTransport,
-    WebSocketTransport,
-)
+from inference_streaming_benchmark import transports as _transports  # noqa: E402, F401 — triggers registration
+from inference_streaming_benchmark.transports import registry  # noqa: E402
+from inference_streaming_benchmark.transports.websocket.transport import WebSocketTransport  # noqa: E402
+
+WebSocketRawTransport = registry.get("websocket_raw")
 
 
 def _jpeg_bytes() -> bytes:
@@ -35,11 +36,12 @@ def test_end_to_end(cls, monkeypatch):
     async def _run_sync(fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
+    import inference_streaming_benchmark.transports.codec as codec_mod
     import inference_streaming_benchmark.transports.websocket.transport as mod
 
     monkeypatch.setattr(mod, "run_in_threadpool", _run_sync)
     # Shrink the raw shape so the raw-variant test payload stays tiny.
-    monkeypatch.setattr(mod, "_RAW_SHAPE", (4, 4, 3))
+    monkeypatch.setattr(codec_mod, "FRAME_SHAPE", (4, 4, 3))
 
     app = cls.build_app(fake_handler)
     client = TestClient(app)

@@ -9,12 +9,12 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from inference_streaming_benchmark.config import CONTROL_PORT
 from inference_streaming_benchmark.engine import InferenceEngine
 from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.transports import registry
 from inference_streaming_benchmark.transports.base import Transport
 
-CONTROL_PORT = 9000
 LISTEN_READY_TIMEOUT_S = 5.0
 
 

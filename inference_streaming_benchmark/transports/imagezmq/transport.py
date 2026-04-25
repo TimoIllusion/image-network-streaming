@@ -10,6 +10,7 @@ import numpy as np
 from inference_streaming_benchmark.logging import logger
 
 from ..base import Handler, Transport
+from ..envelope import build, unpack
 
 
 class ImageZMQTransport(Transport):
@@ -47,7 +48,7 @@ class ImageZMQTransport(Transport):
                 decode_ms = 0.0
                 detections, timings = handler(image)
                 timings["decode_ms"] = decode_ms
-                self._hub.send_reply(json.dumps({"batched_detections": detections, "timings": timings}).encode())
+                self._hub.send_reply(json.dumps(build(detections, timings)).encode())
 
         self._listener_thread = threading.Thread(target=_serve, daemon=True)
         self._listener_thread.start()
@@ -77,9 +78,9 @@ class ImageZMQTransport(Transport):
         self._sending = False
         timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
-        response = json.loads(response_bytes)
-        timings.update(response.get("timings", {}))
-        return response["batched_detections"][0], timings
+        detections, server_timings = unpack(json.loads(response_bytes))
+        timings.update(server_timings)
+        return detections, timings
 
     def disconnect(self) -> None:
         while self._sending:
