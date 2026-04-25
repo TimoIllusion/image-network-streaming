@@ -1,74 +1,78 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.concurrency import run_in_threadpool
+from websockets.exceptions import ConnectionClosed
 from websockets.sync.client import ClientConnection
 from websockets.sync.client import connect as ws_connect
+from websockets.sync.server import serve as ws_serve
 
 from inference_streaming_benchmark.logging import logger
 
-from .._fastapi_base import FastAPITransport
-from ..base import Handler
+from ..base import Handler, Transport
 from ..codec import decode, encode
 from ..envelope import build, unpack
 
 
-class WebSocketTransport(FastAPITransport):
+class WebSocketTransport(Transport):
     name = "websocket"
-    display_name = "WebSocket (FastAPI)"
+    display_name = "WebSocket (sync)"
     default_port = 8009
     RAW = False
 
     def __init__(self):
-        super().__init__()
+        self._server = None  # websockets.sync.server.Server
+        self._server_thread: threading.Thread | None = None
         self._ws: ClientConnection | None = None
 
     # ----- server role -----
 
-    @classmethod
-    def build_app(cls, handler: Handler) -> FastAPI:
-        """Build the FastAPI app for this transport. Exposed for testability (TestClient)."""
-        app = FastAPI()
-        raw = cls.RAW
-        log_name = cls.name
+    def start(self, port: int, handler: Handler) -> None:
+        self._server = None
+        raw = self.RAW
+        log_name = self.name
+        ready = threading.Event()
 
-        def _infer(data: bytes):
-            t = time.perf_counter()
-            image = decode(data, raw=raw)
-            decode_ms = (time.perf_counter() - t) * 1000
-            results, timings = handler(image)
-            timings["decode_ms"] = decode_ms
-            return results, timings
-
-        @app.websocket("/detect")
-        async def detect(ws: WebSocket):
-            await ws.accept()
-            logger.info(f"{log_name} websocket client connected")
+        def handle(ws):
+            logger.info(f"{log_name} client connected")
             try:
                 while True:
+                    data = ws.recv()
                     t0 = time.perf_counter()
-                    data = await ws.receive_bytes()
-                    results, timings = await run_in_threadpool(_infer, data)
-                    await ws.send_text(json.dumps(build(results, timings)))
-                    logger.info(
-                        f"{log_name} total={(time.perf_counter() - t0) * 1000:.1f}ms "
-                        f"decode={timings['decode_ms']:.1f}ms infer={timings['infer_ms']:.1f}ms "
-                        f"post={timings['post_ms']:.1f}ms"
-                    )
-            except WebSocketDisconnect:
-                logger.info(f"{log_name} websocket client disconnected")
+                    image = decode(data, raw=raw)
+                    decode_ms = (time.perf_counter() - t0) * 1000
+                    detections, timings = handler(image)
+                    timings["decode_ms"] = decode_ms
+                    ws.send(json.dumps(build(detections, timings)))
+            except ConnectionClosed:
+                logger.info(f"{log_name} client disconnected")
 
-        return app
+        def serve():
+            with ws_serve(handle, "0.0.0.0", port, max_size=16 * 1024 * 1024, compression=None) as server:
+                self._server = server
+                logger.info(f"{log_name} transport listening on ws://0.0.0.0:{port}")
+                ready.set()
+                server.serve_forever()  # blocks until shutdown() is called
+
+        self._server_thread = threading.Thread(target=serve, daemon=True)
+        self._server_thread.start()
+        ready.wait(timeout=10)
+
+    def stop(self) -> None:
+        if self._server is not None:
+            self._server.shutdown()
+        if self._server_thread is not None:
+            self._server_thread.join(timeout=5)
+        self._server = None
+        self._server_thread = None
 
     # ----- client role -----
 
     def connect(self, host: str, port: int) -> None:
-        # Persistent connection — reused across send() calls. Larger max_size to fit raw 1080p frames (~6 MB).
-        self._ws = ws_connect(f"ws://{host}:{port}/detect", max_size=16 * 1024 * 1024)
+        self._ws = ws_connect(f"ws://{host}:{port}/", max_size=16 * 1024 * 1024, compression=None)
 
     def send(self, frame: np.ndarray):
         assert self._ws is not None, "connect() first"
