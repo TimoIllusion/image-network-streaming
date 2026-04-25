@@ -14,7 +14,7 @@ from .camera import _open_camera
 
 # Columns we collect per frame and show as medians in the stats table.
 # transmission_ms = total - infer: end-to-end cost excluding only AI inference.
-TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "transmission_ms", "total_ms")
+TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "total_ms", "transmission_ms")
 
 
 class CameraHandle:
@@ -110,7 +110,7 @@ class BenchmarkCollector:
             }
             for col in TIMING_COLUMNS:
                 samples = data[col]
-                abbrevs = {"transmission_ms": "trans (ms)", "encode_ms": "enc (ms)", "decode_ms": "dec (ms)"}
+                abbrevs = {"transmission_ms": "total w/o infer (ms)", "encode_ms": "enc (ms)", "decode_ms": "dec (ms)"}
                 label = abbrevs.get(col, col.replace("_ms", " (ms)"))
                 row[label] = f"{statistics.median(samples):.1f}" if samples else "-"
             rows.append(row)
