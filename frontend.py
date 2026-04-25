@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from inference_streaming_benchmark.config import CONTROL_BASE, CONTROL_HOST, CONTROL_TIMEOUT_S, UI_PORT
 from inference_streaming_benchmark.frontend.media import draw_detections, draw_fps
 from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.transports import registry
@@ -23,11 +24,6 @@ from inference_streaming_benchmark.transports.codec import FRAME_SHAPE
 
 # importing the transports package above triggers every transport's registration.
 from inference_streaming_benchmark import transports  # noqa: F401  isort:skip
-
-HOST = "localhost"
-UI_PORT = 8501
-CONTROL_BASE = "http://localhost:9000"
-CONTROL_TIMEOUT_S = 5.0
 
 # Columns we collect per frame and show as medians in the stats table.
 # transmission_ms = total - infer: end-to-end cost excluding only AI inference.
@@ -130,7 +126,7 @@ class FrontendState:
 
             cls = registry.get(transport_name)
             client = cls()
-            client.connect(HOST, port)
+            client.connect(CONTROL_HOST, port)
             self.client = client
             self.active_transport = transport_name
             logger.info(f"client connected: {transport_name} → :{port}")
