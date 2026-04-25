@@ -8,19 +8,22 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from inference_streaming_benchmark.config import CONTROL_BASE, CONTROL_TIMEOUT_S
 from inference_streaming_benchmark.transports import registry
 
 # importing the transports package above triggers every transport's registration.
 from inference_streaming_benchmark import transports  # noqa: F401  isort:skip
 
+from . import control_client
 from .mjpeg import _mjpeg_frames
-from .state import FrontendState
+from .state import BenchmarkCollector, CameraHandle, TransportSession
 
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-state = FrontendState()
+camera = CameraHandle()
+session = TransportSession()
+collector = BenchmarkCollector()
+
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -39,12 +42,11 @@ def api_status():
     the currently active transport also has ``active: true`` in /api/transports.
     """
     try:
-        r = requests.get(f"{CONTROL_BASE}/transports", timeout=CONTROL_TIMEOUT_S)
-        r.raise_for_status()
+        items = control_client.fetch_transports()
     except requests.RequestException:
         # server unreachable → all transports shown offline
         return {name: False for name in registry.all_transports()}
-    return {item["name"]: True for item in r.json()}
+    return {item["name"]: True for item in items}
 
 
 class ControlBody(BaseModel):
@@ -57,25 +59,32 @@ def api_control(body: ControlBody):
     if body.backend not in registry.all_transports():
         raise HTTPException(status_code=400, detail=f"unknown transport: {body.backend}")
     try:
-        state.set_control(body.backend, body.infer)
+        if body.infer:
+            port = control_client.switch_transport(body.backend)
+        else:
+            port = 0  # ignored when infer=False
+        session.set(body.backend, body.infer, port)
     except requests.HTTPError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
     except requests.RequestException as e:
         raise HTTPException(status_code=503, detail=f"control plane unreachable: {e}") from e
-    return {"ok": True, "backend": state.active_transport, "infer": state.infer}
+    return {"ok": True, "backend": session.active_transport, "infer": session.infer}
 
 
 @app.post("/api/clear")
 def api_clear():
-    state.bench_results = {}
+    collector.clear()
     return {"ok": True}
 
 
 @app.get("/api/stats")
 def api_stats():
-    return state.build_stats_rows()
+    return collector.build_stats_rows()
 
 
 @app.get("/video_feed")
 def video_feed():
-    return StreamingResponse(_mjpeg_frames(state), media_type="multipart/x-mixed-replace; boundary=frame")
+    return StreamingResponse(
+        _mjpeg_frames(camera, session, collector),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
