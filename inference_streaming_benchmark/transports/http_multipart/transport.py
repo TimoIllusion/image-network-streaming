@@ -14,6 +14,7 @@ from inference_streaming_benchmark.logging import logger
 from .._fastapi_base import FastAPITransport
 from ..base import Handler
 from ..codec import decode, encode
+from ..envelope import build, unpack
 
 
 class HTTPMultipartTransport(FastAPITransport):
@@ -55,7 +56,7 @@ class HTTPMultipartTransport(FastAPITransport):
                     f"decode={timings['decode_ms']:.1f}ms infer={timings['infer_ms']:.1f}ms "
                     f"post={timings['post_ms']:.1f}ms"
                 )
-                return JSONResponse(content={"batched_detections": results, "timings": timings})
+                return JSONResponse(content=build(results, timings))
         else:
 
             async def detect(file: UploadFile = File(...)):
@@ -67,7 +68,7 @@ class HTTPMultipartTransport(FastAPITransport):
                     f"decode={timings['decode_ms']:.1f}ms infer={timings['infer_ms']:.1f}ms "
                     f"post={timings['post_ms']:.1f}ms"
                 )
-                return JSONResponse(content={"batched_detections": results, "timings": timings})
+                return JSONResponse(content=build(results, timings))
 
         app.post("/detect/")(detect)
         return app
@@ -100,9 +101,9 @@ class HTTPMultipartTransport(FastAPITransport):
             timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
             if response.status_code == 200:
-                data = response.json()
-                timings.update(data.get("timings", {}))
-                return data["batched_detections"][0], timings
+                detections, server_timings = unpack(response.json())
+                timings.update(server_timings)
+                return detections, timings
             return None, timings
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
             logger.error(f"{self.name} send failed: {e}")

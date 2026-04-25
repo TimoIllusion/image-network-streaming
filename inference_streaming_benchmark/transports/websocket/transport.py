@@ -14,6 +14,7 @@ from inference_streaming_benchmark.logging import logger
 from .._fastapi_base import FastAPITransport
 from ..base import Handler
 from ..codec import decode, encode
+from ..envelope import build, unpack
 
 
 class WebSocketTransport(FastAPITransport):
@@ -52,7 +53,7 @@ class WebSocketTransport(FastAPITransport):
                     t0 = time.perf_counter()
                     data = await ws.receive_bytes()
                     results, timings = await run_in_threadpool(_infer, data)
-                    await ws.send_text(json.dumps({"batched_detections": results, "timings": timings}))
+                    await ws.send_text(json.dumps(build(results, timings)))
                     logger.info(
                         f"{log_name} total={(time.perf_counter() - t0) * 1000:.1f}ms "
                         f"decode={timings['decode_ms']:.1f}ms infer={timings['infer_ms']:.1f}ms "
@@ -82,9 +83,9 @@ class WebSocketTransport(FastAPITransport):
             response = self._ws.recv()
             timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
-            data = json.loads(response)
-            timings.update(data.get("timings", {}))
-            return data["batched_detections"][0], timings
+            detections, server_timings = unpack(json.loads(response))
+            timings.update(server_timings)
+            return detections, timings
         except Exception as e:
             logger.error(f"{self.name} send failed: {e}")
             return None, timings

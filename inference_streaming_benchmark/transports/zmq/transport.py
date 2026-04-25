@@ -10,6 +10,7 @@ from inference_streaming_benchmark.logging import logger
 
 from ..base import Handler, Transport
 from ..codec import decode, encode
+from ..envelope import build, unpack
 
 
 class ZMQTransport(Transport):
@@ -53,7 +54,7 @@ class ZMQTransport(Transport):
                 decode_ms = (time.perf_counter() - t0) * 1000
                 detections, timings = handler(image)
                 timings["decode_ms"] = decode_ms
-                self._server_socket.send_json({"batched_detections": detections, "timings": timings})
+                self._server_socket.send_json(build(detections, timings))
 
         self._listener_thread = threading.Thread(target=_serve, daemon=True)
         self._listener_thread.start()
@@ -90,8 +91,9 @@ class ZMQTransport(Transport):
         response = self._client_socket.recv_json()
         timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
-        timings.update(response.get("timings", {}))
-        return response["batched_detections"][0], timings
+        detections, server_timings = unpack(response)
+        timings.update(server_timings)
+        return detections, timings
 
     def disconnect(self) -> None:
         if self._client_socket is not None:
