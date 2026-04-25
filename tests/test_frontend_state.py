@@ -3,7 +3,7 @@ import pytest
 pytest.importorskip("cv2")
 pytest.importorskip("fastapi")
 
-from frontend import FrontendState  # noqa: E402
+from inference_streaming_benchmark.frontend.state import FrontendState  # noqa: E402
 
 
 def test_record_timing_derives_comms_and_transmission():
