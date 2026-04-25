@@ -4,7 +4,6 @@ import io
 import threading
 import time
 
-import cv2
 import numpy as np
 import requests
 import uvicorn
@@ -12,14 +11,10 @@ from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
-from inference_streaming_benchmark.engine import decode_jpeg_bytes
 from inference_streaming_benchmark.logging import logger
 
 from ..base import Handler, Transport
-
-# Raw payload shape — must match what the frontend camera produces.
-# Kept in sync with grpc/transport.py:38 and frontend.py:_open_camera.
-_RAW_SHAPE = (1080, 1920, 3)
+from ..codec import decode, encode
 
 
 class HTTPMultipartTransport(Transport):
@@ -45,10 +40,7 @@ class HTTPMultipartTransport(Transport):
 
         def _infer(data: bytes):
             t = time.perf_counter()
-            if raw:
-                image = np.frombuffer(data, dtype=np.uint8).reshape(_RAW_SHAPE)
-            else:
-                image = decode_jpeg_bytes(data)
+            image = decode(data, raw=raw)
             decode_ms = (time.perf_counter() - t) * 1000
             results, timings = handler(image)
             timings["decode_ms"] = decode_ms
@@ -109,11 +101,7 @@ class HTTPMultipartTransport(Transport):
         try:
             t_total = time.perf_counter()
             t0 = time.perf_counter()
-            if self.RAW:
-                payload = frame.tobytes()
-            else:
-                _, encoded = cv2.imencode(".jpg", frame)
-                payload = encoded.tobytes()
+            payload = encode(frame, raw=self.RAW)
             timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
             if self.RAW:

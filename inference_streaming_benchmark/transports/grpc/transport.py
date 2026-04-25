@@ -9,6 +9,7 @@ import numpy as np
 from inference_streaming_benchmark.logging import logger
 
 from ..base import Handler, Transport
+from ..codec import FRAME_SHAPE
 from .ai_server_pb2 import (
     BoundingBox,
     DetectionResponse,
@@ -35,7 +36,7 @@ class _Servicer(AiDetectionServiceServicer):
     def Detect(self, request, context):
         t0 = time.perf_counter()
         # gRPC sends raw ndarray bytes — decode is a cheap reshape, not JPEG.
-        image = np.frombuffer(request.image, dtype=np.uint8).reshape((1080, 1920, 3))
+        image = np.frombuffer(request.image, dtype=np.uint8).reshape(FRAME_SHAPE)
         if image.shape[-1] == 4:
             image = image[..., :3]
         t1 = time.perf_counter()

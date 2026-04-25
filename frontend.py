@@ -19,6 +19,7 @@ from inference_streaming_benchmark.frontend.media import draw_detections, draw_f
 from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.transports import registry
 from inference_streaming_benchmark.transports.base import Transport
+from inference_streaming_benchmark.transports.codec import FRAME_SHAPE
 
 # importing the transports package above triggers every transport's registration.
 from inference_streaming_benchmark import transports  # noqa: F401  isort:skip
@@ -53,7 +54,8 @@ class _FakeVideoCapture:
         img = cv2.imread(str(_MOCK_IMAGE_PATH))
         if img is None:
             raise RuntimeError(f"MOCK_CAMERA: could not load {_MOCK_IMAGE_PATH}")
-        self._base = cv2.resize(img, (1920, 1080))
+        h, w = FRAME_SHAPE[0], FRAME_SHAPE[1]
+        self._base = cv2.resize(img, (w, h))
 
     def read(self):
         if self._released:
@@ -85,8 +87,8 @@ def _open_camera():
         logger.info("MOCK_CAMERA=1 — using synthesized frame source")
         return _FakeVideoCapture()
     cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_SHAPE[1])
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_SHAPE[0])
     return cap
 
 

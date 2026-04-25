@@ -35,11 +35,12 @@ def test_end_to_end(cls, monkeypatch):
     async def _run_sync(fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
+    import inference_streaming_benchmark.transports.codec as codec_mod
     import inference_streaming_benchmark.transports.websocket.transport as mod
 
     monkeypatch.setattr(mod, "run_in_threadpool", _run_sync)
     # Shrink the raw shape so the raw-variant test payload stays tiny.
-    monkeypatch.setattr(mod, "_RAW_SHAPE", (4, 4, 3))
+    monkeypatch.setattr(codec_mod, "FRAME_SHAPE", (4, 4, 3))
 
     app = cls.build_app(fake_handler)
     client = TestClient(app)

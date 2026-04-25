@@ -3,17 +3,13 @@ from __future__ import annotations
 import threading
 import time
 
-import cv2
 import numpy as np
 import zmq
 
-from inference_streaming_benchmark.engine import decode_jpeg_bytes
 from inference_streaming_benchmark.logging import logger
 
 from ..base import Handler, Transport
-
-# Raw payload shape — kept in sync with grpc/transport.py:38 and frontend.py:_open_camera.
-_RAW_SHAPE = (1080, 1920, 3)
+from ..codec import decode, encode
 
 
 class ZMQTransport(Transport):
@@ -53,10 +49,7 @@ class ZMQTransport(Transport):
                 except zmq.Again:
                     continue
                 t0 = time.perf_counter()
-                if raw:
-                    image = np.frombuffer(image_data, dtype=np.uint8).reshape(_RAW_SHAPE)
-                else:
-                    image = decode_jpeg_bytes(image_data)
+                image = decode(image_data, raw=raw)
                 decode_ms = (time.perf_counter() - t0) * 1000
                 detections, timings = handler(image)
                 timings["decode_ms"] = decode_ms
@@ -90,11 +83,7 @@ class ZMQTransport(Transport):
         t_total = time.perf_counter()
 
         t0 = time.perf_counter()
-        if self.RAW:
-            payload = frame.tobytes()
-        else:
-            _, buffer = cv2.imencode(".jpg", frame)
-            payload = buffer.tobytes()
+        payload = encode(frame, raw=self.RAW)
         timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
         self._client_socket.send(payload)
