@@ -48,15 +48,23 @@ pip install -e ".[dev,test]"
 One AI server process hosts every transport. A connected client picks which protocol is active; the server hot-swaps listeners on demand. Exactly one transport is active at any time.
 
 ```bash
-python serve.py        # control plane + central UI on :9000, http_multipart active by default
-python client.py       # http://127.0.0.1:8501 (webcam UI, backend dropdown, mock-camera toggle)
+python server.py        # control plane + central UI on :9000, http_multipart active by default
+python client.py        # http://127.0.0.1:8501 (webcam UI, backend dropdown, mock-camera toggle)
 ```
 
 Open `http://127.0.0.1:9000/` for the **central operator panel** — registers connected clients, switches transport for everyone with one click, toggles per-client mock camera and inference.
 
+**Multiple clients on one machine**: pass `--port` (or `--port 0` for auto-pick). The default client name auto-suffixes the port (`<hostname>-<port>`) so they don't collide in the registry:
+
+```bash
+python client.py                          # 8501, name = <hostname>-8501
+python client.py --port 8502              # 8502, name = <hostname>-8502
+MOCK_CAMERA=1 python client.py --port 0   # any free port, mock frames
+```
+
 Options:
-- `python serve.py --default zmq` — start with `zmq` active
-- `python serve.py --default none` — idle until a client picks a transport
+- `python server.py --default zmq` — start with `zmq` active
+- `python server.py --default none` — idle until a client picks a transport
 
 | Transport      | Port  | Description                       |
 | -------------- | ----- | --------------------------------- |
@@ -73,7 +81,7 @@ The server (workstation/GPU box) and clients (RPi5s, laptops, anything with Pyth
 
 **Server (workstation):**
 ```bash
-python serve.py
+python server.py
 # central UI: http://<server-ip>:9000/
 ```
 
@@ -95,8 +103,8 @@ Clients auto-register with the server on startup and send a heartbeat every seco
 | --------------------- | -------------------- | -------------------------------------------- |
 | `INFSB_CONTROL_HOST`  | `localhost`          | Server hostname/IP the client should reach   |
 | `INFSB_CONTROL_PORT`  | `9000`               | Server control plane + central UI port       |
-| `INFSB_UI_PORT`       | `8501`               | Per-device client UI port                    |
-| `INFSB_CLIENT_NAME`   | `socket.gethostname()` | Friendly name shown in the central UI      |
+| `INFSB_UI_PORT`       | `8501` (auto-fallback) | Per-device client UI port. CLI `--port` overrides. |
+| `INFSB_CLIENT_NAME`   | `<hostname>-<port>`    | Friendly name shown in the central UI. CLI `--name` overrides. |
 | `MOCK_CAMERA`         | unset                | `1` → start with synthetic frames           |
 
 ### Adding a new transport
@@ -123,7 +131,7 @@ docker build -f ./docker/Dockerfile -t inference-streaming-benchmark:latest .
 ```
 
 ```bash
-# Runs `python serve.py` (http_multipart active by default).
+# Runs `python server.py` (http_multipart active by default).
 # Expose :9000 (control plane) plus whichever transport port you want to reach.
 docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all \
   -p 9000:9000 -p 8008:8008 \
@@ -132,7 +140,7 @@ docker run -it --name aiserver1 --rm --shm-size=8g --gpus=all \
 # To start with a different default transport, pass through the flag and expose its port:
 docker run -it --rm --shm-size=8g --gpus=all \
   -p 9000:9000 -p 5556:5556 \
-  inference-streaming-benchmark:latest python serve.py --default imagezmq
+  inference-streaming-benchmark:latest python server.py --default imagezmq
 ```
 
 ## Versioning

@@ -18,4 +18,4 @@ RUN python -m pip install .
 # Override with `--default <name>`; expose the matching port when running the image.
 EXPOSE 9000 8008
 
-CMD ["python", "serve.py"]
+CMD ["python", "server.py"]

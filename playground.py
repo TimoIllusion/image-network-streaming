@@ -1,6 +1,6 @@
 """Ad-hoc smoke test for the gRPC transport.
 
-Assumes `python serve.py --default grpc` is running on localhost:50051.
+Assumes `python server.py --default grpc` is running on localhost:50051.
 """
 
 import cv2

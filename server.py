@@ -2,9 +2,9 @@
 
 Usage::
 
-    python serve.py                      # start with http_multipart active (default)
-    python serve.py --default zmq        # start with zmq active
-    python serve.py --default none       # start with no transport active — a client picks
+    python server.py                      # start with http_multipart active (default)
+    python server.py --default zmq        # start with zmq active
+    python server.py --default none       # start with no transport active — a client picks
 """
 
 from __future__ import annotations
