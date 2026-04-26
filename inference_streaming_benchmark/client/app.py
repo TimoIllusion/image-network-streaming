@@ -17,6 +17,7 @@ from inference_streaming_benchmark import transports  # noqa: F401  isort:skip
 
 from . import control_client
 from .mjpeg import _mjpeg_frames
+from .processor import FrameProcessor
 from .registration import Registrar, get_local_ip
 from .state import BenchmarkCollector, CameraHandle, TransportSession
 
@@ -26,6 +27,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 camera = CameraHandle()
 session = TransportSession()
 collector = BenchmarkCollector()
+processor = FrameProcessor(camera, session, collector)
 
 
 def _build_heartbeat_stats() -> dict:
@@ -51,11 +53,13 @@ async def lifespan(_app: FastAPI):
         version="",
         stats_provider=_build_heartbeat_stats,
     )
+    processor.start()
     registrar.start()
     try:
         yield
     finally:
         registrar.stop()
+        processor.stop()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -164,6 +168,6 @@ def api_stats():
 @app.get("/video_feed")
 def video_feed():
     return StreamingResponse(
-        _mjpeg_frames(camera, session, collector),
+        _mjpeg_frames(processor),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
