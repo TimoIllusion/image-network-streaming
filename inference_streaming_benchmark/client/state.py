@@ -10,7 +10,7 @@ from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.transports import registry
 from inference_streaming_benchmark.transports.base import Transport
 
-from .camera import _open_camera
+from .camera import CAMERA_MODES, initial_mode_from_env, open_camera
 
 # Columns we collect per frame and show as medians in the stats table.
 # transmission_ms = total - infer: end-to-end cost excluding only AI inference.
@@ -18,17 +18,33 @@ TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "
 
 
 class CameraHandle:
-    """Owns the cv2.VideoCapture (or fake) lifecycle. Initialized on first frame."""
+    """Owns the cv2.VideoCapture (or fake) lifecycle. Supports runtime mode swap."""
 
-    def __init__(self):
+    def __init__(self, initial_mode: str | None = None):
         self.cap: cv2.VideoCapture | None = None
+        self.mode = initial_mode if initial_mode is not None else initial_mode_from_env()
+        self._lock = threading.Lock()
 
     def ensure(self) -> cv2.VideoCapture:
-        if self.cap is None:
-            logger.info("Start camera initialization")
-            self.cap = _open_camera()
-            logger.info("Camera initialized")
-        return self.cap
+        with self._lock:
+            if self.cap is None:
+                self.cap = open_camera(self.mode)
+            return self.cap
+
+    def set_mode(self, mode: str) -> None:
+        if mode not in CAMERA_MODES:
+            raise ValueError(f"unknown camera mode: {mode!r}")
+        with self._lock:
+            if self.mode == mode and self.cap is not None:
+                return
+            if self.cap is not None:
+                try:
+                    self.cap.release()
+                except Exception:
+                    logger.exception("camera release failed")
+                self.cap = None
+            self.mode = mode
+        logger.info(f"camera mode set: {mode}")
 
 
 class TransportSession:
@@ -58,6 +74,13 @@ class TransportSession:
             self.client = client
             self.active_transport = transport_name
             logger.info(f"client connected: {transport_name} → :{port}")
+
+    def set_infer(self, infer: bool) -> None:
+        """Toggle inference without changing transport. Used when only `inference` flips."""
+        with self.lock:
+            self.infer = infer
+            if not infer:
+                self._disconnect_locked()
 
     def _disconnect_locked(self) -> None:
         if self.client is not None:
@@ -115,3 +138,23 @@ class BenchmarkCollector:
                 row[label] = f"{statistics.median(samples):.1f}" if samples else "-"
             rows.append(row)
         return rows
+
+    def snapshot_for_heartbeat(self, active_transport: str | None) -> dict:
+        """Compact per-backend stats for the central UI's clients table."""
+        if active_transport is None or active_transport not in self.bench_results:
+            return {}
+        data = self.bench_results[active_transport]
+        totals = data["total_ms"]
+        if not totals:
+            return {"backend": active_transport}
+        duration_s = data["active_time_s"]
+        out = {
+            "backend": active_transport,
+            "frames": len(totals),
+            "fps": (len(totals) / duration_s) if duration_s > 0 else 0.0,
+        }
+        for col in ("total_ms", "infer_ms", "transmission_ms"):
+            samples = data[col]
+            if samples:
+                out[col] = float(statistics.median(samples))
+        return out

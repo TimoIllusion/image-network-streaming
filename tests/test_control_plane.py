@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -5,6 +7,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from inference_streaming_benchmark import transports  # noqa: F401, E402 — triggers registration
+from inference_streaming_benchmark.client_registry import ClientRegistry  # noqa: E402
 from inference_streaming_benchmark.server import build_control_app  # noqa: E402
 from inference_streaming_benchmark.transports import registry  # noqa: E402
 
@@ -112,3 +115,135 @@ def test_lifespan_shutdown_calls_server_stop():
     with TestClient(build_control_app(server)):
         pass  # leaving the context triggers lifespan shutdown
     assert server.stop_called is True
+
+
+# ---- client registry endpoints ----
+
+
+def test_register_and_clients_round_trip():
+    reg = ClientRegistry()
+    with TestClient(build_control_app(_FakeServer(), reg)) as client:
+        r = client.post(
+            "/register",
+            json={"name": "rpi-1", "ui_url": "http://10.0.0.5:8501", "version": "0.1"},
+        )
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+        r = client.get("/clients")
+        assert r.status_code == 200
+        payload = r.json()
+        names = [c["name"] for c in payload["clients"]]
+        assert names == ["rpi-1"]
+        assert payload["clients"][0]["ui_url"] == "http://10.0.0.5:8501"
+
+
+def test_heartbeat_updates_stats():
+    reg = ClientRegistry()
+    with TestClient(build_control_app(_FakeServer(), reg)) as client:
+        client.post("/register", json={"name": "rpi-1", "ui_url": "http://x:8501", "version": ""})
+        r = client.post("/heartbeat", json={"name": "rpi-1", "stats": {"fps": 28.4, "backend": "grpc"}})
+        assert r.status_code == 200
+
+        r = client.get("/clients")
+        clients = r.json()["clients"]
+        assert clients[0]["stats"] == {"fps": 28.4, "backend": "grpc"}
+
+
+def test_heartbeat_unknown_client_returns_404():
+    with TestClient(build_control_app(_FakeServer())) as client:
+        r = client.post("/heartbeat", json={"name": "ghost", "stats": {}})
+    assert r.status_code == 404
+
+
+def test_client_control_proxies_to_client_url():
+    """POST /clients/{name}/control must forward the body to the client's /api/control."""
+    reg = ClientRegistry()
+    reg.register("rpi-1", "http://10.0.0.5:8501", "")
+
+    sent = {}
+
+    class _FakeResponse:
+        def __init__(self, body):
+            self._body = body
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self._body
+
+    def _fake_post(url, json=None, timeout=None):
+        sent["url"] = url
+        sent["json"] = json
+        return _FakeResponse({"ok": True, "backend": json.get("backend"), "mock_camera": json.get("mock_camera")})
+
+    with TestClient(build_control_app(_FakeServer(), reg)) as client:
+        with patch("inference_streaming_benchmark.server.requests.post", side_effect=_fake_post):
+            r = client.post("/clients/rpi-1/control", json={"mock_camera": True})
+            assert r.status_code == 200
+            assert r.json()["mock_camera"] is True
+
+    assert sent["url"] == "http://10.0.0.5:8501/api/control"
+    # Optional fields with None must be stripped before forwarding.
+    assert sent["json"] == {"mock_camera": True}
+
+
+def test_client_control_unknown_client_returns_404():
+    with TestClient(build_control_app(_FakeServer())) as client:
+        r = client.post("/clients/ghost/control", json={"mock_camera": True})
+    assert r.status_code == 404
+
+
+def test_client_control_empty_body_is_400():
+    reg = ClientRegistry()
+    reg.register("rpi-1", "http://10.0.0.5:8501", "")
+    with TestClient(build_control_app(_FakeServer(), reg)) as client:
+        r = client.post("/clients/rpi-1/control", json={})
+    assert r.status_code == 400
+
+
+def test_switch_with_cascade_calls_each_client():
+    """cascade=true forwards a /api/control POST to every registered client."""
+    reg = ClientRegistry()
+    reg.register("rpi-1", "http://10.0.0.5:8501", "")
+    reg.register("rpi-2", "http://10.0.0.6:8501", "")
+    reg.heartbeat("rpi-1", {"inference": True})
+    reg.heartbeat("rpi-2", {"inference": False})
+
+    posted: list[tuple[str, dict]] = []
+
+    class _Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {}
+
+    def _fake_post(url, json=None, timeout=None):
+        posted.append((url, json))
+        return _Resp()
+
+    with TestClient(build_control_app(_FakeServer(), reg)) as client:
+        with patch("inference_streaming_benchmark.server.requests.post", side_effect=_fake_post):
+            r = client.post("/switch", json={"name": "grpc", "cascade": True})
+
+    assert r.status_code == 200
+    urls = sorted(u for u, _ in posted)
+    assert urls == ["http://10.0.0.5:8501/api/control", "http://10.0.0.6:8501/api/control"]
+    # Cascade preserves each client's last-known inference flag.
+    by_url = {u: body for u, body in posted}
+    assert by_url["http://10.0.0.5:8501/api/control"] == {"backend": "grpc", "inference": True}
+    assert by_url["http://10.0.0.6:8501/api/control"] == {"backend": "grpc", "inference": False}
+
+
+def test_switch_without_cascade_does_not_post_to_clients():
+    reg = ClientRegistry()
+    reg.register("rpi-1", "http://10.0.0.5:8501", "")
+    reg.heartbeat("rpi-1", {"inference": True})
+
+    with TestClient(build_control_app(_FakeServer(), reg)) as client:
+        with patch("inference_streaming_benchmark.server.requests.post") as posted:
+            r = client.post("/switch", json={"name": "grpc"})  # no cascade flag
+    assert r.status_code == 200
+    posted.assert_not_called()

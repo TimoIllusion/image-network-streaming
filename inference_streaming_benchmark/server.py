@@ -4,11 +4,16 @@ import socket
 import threading
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+import requests
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from inference_streaming_benchmark.client_registry import ClientRegistry
 from inference_streaming_benchmark.config import CONTROL_PORT
 from inference_streaming_benchmark.engine import InferenceEngine
 from inference_streaming_benchmark.logging import logger
@@ -16,6 +21,8 @@ from inference_streaming_benchmark.transports import registry
 from inference_streaming_benchmark.transports.base import Transport
 
 LISTEN_READY_TIMEOUT_S = 5.0
+PROXY_TIMEOUT_S = 5.0
+SERVER_STATIC_DIR = Path(__file__).parent / "server_static"
 
 
 def _wait_until_listening(port: int, host: str = "localhost", timeout: float = LISTEN_READY_TIMEOUT_S) -> bool:
@@ -73,15 +80,65 @@ class Server:
 
 class SwitchBody(BaseModel):
     name: str
+    cascade: bool = False
 
 
-def build_control_app(server: Server) -> FastAPI:
+class RegisterBody(BaseModel):
+    name: str
+    ui_url: str
+    version: str = ""
+
+
+class HeartbeatBody(BaseModel):
+    name: str
+    stats: dict
+
+
+class ClientControlBody(BaseModel):
+    backend: str | None = None
+    inference: bool | None = None
+    mock_camera: bool | None = None
+
+
+def _cascade_to_clients(client_registry: ClientRegistry, transport_name: str) -> None:
+    """After a switch, tell every registered client to reconnect to the new transport.
+
+    Best-effort: failures are logged, never raised — one offline client should not
+    block the operator's switch.
+    """
+    for record in client_registry.list_active():
+        wants_inference = bool(record.stats.get("inference", True))
+        try:
+            requests.post(
+                f"{record.ui_url}/api/control",
+                json={"backend": transport_name, "inference": wants_inference},
+                timeout=PROXY_TIMEOUT_S,
+            ).raise_for_status()
+            logger.info(f"cascaded transport={transport_name} to client {record.name}")
+        except requests.RequestException as e:
+            logger.warning(f"cascade to client {record.name} ({record.ui_url}) failed: {e}")
+
+
+def build_control_app(server: Server, client_registry: ClientRegistry | None = None) -> FastAPI:
+    if client_registry is None:
+        client_registry = ClientRegistry()
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         yield
         server.stop()
 
     app = FastAPI(lifespan=lifespan)
+
+    if SERVER_STATIC_DIR.exists():
+        app.mount("/static", StaticFiles(directory=SERVER_STATIC_DIR), name="server-static")
+
+    @app.get("/")
+    def index():
+        index_html = SERVER_STATIC_DIR / "index.html"
+        if not index_html.exists():
+            return {"ok": True, "message": "central UI not built"}
+        return FileResponse(index_html)
 
     @app.get("/health")
     def health():
@@ -110,7 +167,46 @@ def build_control_app(server: Server) -> FastAPI:
             instance = server.switch(body.name)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
+        if body.cascade:
+            _cascade_to_clients(client_registry, body.name)
         return {"name": instance.name, "port": type(instance).default_port, "active": True}
+
+    @app.post("/register")
+    def register(body: RegisterBody):
+        record = client_registry.register(body.name, body.ui_url, body.version)
+        logger.info(f"client registered: {record.name} @ {record.ui_url}")
+        return {"ok": True, "name": record.name, "registered_at": record.registered_at}
+
+    @app.post("/heartbeat")
+    def heartbeat(body: HeartbeatBody):
+        try:
+            record = client_registry.heartbeat(body.name, body.stats)
+        except KeyError as e:
+            raise HTTPException(status_code=404, detail=f"unknown client: {body.name}") from e
+        return {"ok": True, "last_heartbeat_at": record.last_heartbeat_at}
+
+    @app.get("/clients")
+    def clients():
+        active_name = server.active.name if server.active is not None else None
+        return {
+            "active_transport": active_name,
+            "clients": [r.to_dict() for r in client_registry.list_active()],
+        }
+
+    @app.post("/clients/{name}/control")
+    def client_control(name: str, body: ClientControlBody):
+        record = client_registry.get(name)
+        if record is None:
+            raise HTTPException(status_code=404, detail=f"unknown client: {name}")
+        payload = {k: v for k, v in body.model_dump().items() if v is not None}
+        if not payload:
+            raise HTTPException(status_code=400, detail="control body is empty")
+        try:
+            r = requests.post(f"{record.ui_url}/api/control", json=payload, timeout=PROXY_TIMEOUT_S)
+            r.raise_for_status()
+        except requests.RequestException as e:
+            raise HTTPException(status_code=502, detail=f"client {name} unreachable: {e}") from e
+        return r.json()
 
     return app
 

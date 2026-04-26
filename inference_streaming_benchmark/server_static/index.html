@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inference Streaming · Central Operator Panel</title>
+    <style>
+      :root {
+        --bg: #f7f5f2;
+        --surface: #ffffff;
+        --fg: #1c1917;
+        --muted: #78716c;
+        --border: #e7e5e4;
+        --accent: #d97706;
+        --accent-hover: #b45309;
+        --danger: #dc2626;
+        --good: #16a34a;
+        --radius: 10px;
+        --shadow: 0 1px 2px rgba(28, 25, 23, 0.04), 0 6px 20px rgba(28, 25, 23, 0.05);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 2rem 1.5rem 3rem;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.5;
+        font-feature-settings: "tnum", "ss01";
+      }
+      .container { max-width: 1280px; margin: 0 auto; }
+      header { margin-bottom: 1.5rem; display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
+      h1 { margin: 0; font-size: 1.75rem; font-weight: 650; letter-spacing: -0.02em; }
+      .subtitle { color: var(--muted); margin: 0; font-size: 0.95rem; }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: var(--shadow);
+      }
+      .controls { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: center; }
+      .control-group { display: flex; align-items: center; gap: 0.5rem; }
+      .control-group > label { font-weight: 500; font-size: 0.9rem; }
+      select, button {
+        font: inherit;
+        font-size: 0.9rem;
+        color: var(--fg);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.4rem 0.75rem;
+        cursor: pointer;
+        transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+      }
+      select:hover, button:hover { border-color: var(--muted); }
+      button.primary {
+        color: var(--accent);
+        border-color: var(--accent);
+        background: transparent;
+        font-weight: 500;
+      }
+      button.primary:hover { background: var(--accent); color: #fff; }
+      .toggle { position: relative; display: inline-block; width: 2.25rem; height: 1.25rem; flex-shrink: 0; }
+      .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+      .toggle-slider {
+        position: absolute; inset: 0;
+        background: var(--border);
+        border-radius: 1rem;
+        cursor: pointer;
+        transition: background 150ms ease;
+      }
+      .toggle-slider::after {
+        content: ''; position: absolute;
+        width: 1rem; height: 1rem;
+        top: 0.125rem; left: 0.125rem;
+        background: #fff; border-radius: 50%;
+        transition: transform 150ms ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+      }
+      .toggle input:checked + .toggle-slider { background: var(--accent); }
+      .toggle input:checked + .toggle-slider::after { transform: translateX(1rem); }
+      table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+      thead th {
+        text-align: right;
+        padding: 0.55rem 0.6rem;
+        border-bottom: 1px solid var(--border);
+        font-weight: 600; color: var(--muted);
+        font-size: 0.75rem;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        white-space: nowrap;
+      }
+      thead th:first-child { text-align: left; }
+      tbody td {
+        padding: 0.55rem 0.6rem;
+        border-bottom: 1px solid var(--border);
+        text-align: right;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      tbody td:first-child { text-align: left; font-family: inherit; font-weight: 500; }
+      tbody tr:last-child td { border-bottom: none; }
+      .age-fresh { color: var(--good); }
+      .age-stale { color: var(--danger); }
+      .row-actions { display: flex; gap: 0.5rem; align-items: center; justify-content: flex-end; }
+      a.client-link { color: var(--fg); text-decoration: none; border-bottom: 1px dashed var(--muted); }
+      a.client-link:hover { color: var(--accent); border-color: var(--accent); }
+      .hint { color: var(--muted); font-style: italic; margin: 0; }
+      .badge {
+        display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px;
+        font-size: 0.72rem; font-family: inherit;
+        background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+      }
+      .badge.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Central Operator Panel</h1>
+        <p class="subtitle">Inference Streaming Benchmark · server: <span id="serverHost">—</span></p>
+      </header>
+
+      <div class="card">
+        <div class="controls">
+          <div class="control-group">
+            <label for="backend">Active transport</label>
+            <select id="backend"></select>
+          </div>
+          <button id="switchAll" class="primary">Switch all clients</button>
+          <span class="hint" id="switchStatus"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin: 0 0 0.5rem 0; font-size: 1.05rem; font-weight: 600;">
+          Connected clients <span class="badge" id="clientCount">0</span>
+        </h2>
+        <div id="clients">
+          <p class="hint">Waiting for clients to register&hellip;</p>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/app.js?v=1"></script>
+  </body>
+</html>

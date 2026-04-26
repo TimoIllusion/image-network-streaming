@@ -3,11 +3,13 @@ const STATS_POLL_MS = 1000;
 
 const backendSelect = document.getElementById("backend");
 const inferCheckbox = document.getElementById("infer");
+const mockCamCheckbox = document.getElementById("mockCam");
 const clearButton = document.getElementById("clear");
 const copyMdButton = document.getElementById("copyMd");
 const statsDiv = document.getElementById("stats");
 const statusDot = document.getElementById("statusDot");
 const statusLabel = document.getElementById("statusLabel");
+const clientNameSpan = document.getElementById("clientName");
 
 let lastRows = [];
 
@@ -16,18 +18,18 @@ function updateStatusOverlay() {
   const live = inferCheckbox.checked && !!backend;
   statusDot.className = "status-dot" + (live ? " live" : "");
   statusLabel.textContent = backend
-    ? `${backend} · ${live ? "detecting" : "idle"}`
+    ? `${backend} · ${live ? "detecting" : "idle"}${mockCamCheckbox.checked ? " · mock" : ""}`
     : "no backend selected";
 }
 
-async function postControl() {
+async function postControl(partial) {
+  const body = partial !== undefined
+    ? partial
+    : { backend: backendSelect.value, inference: inferCheckbox.checked };
   await fetch("/api/control", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      backend: backendSelect.value,
-      infer: inferCheckbox.checked,
-    }),
+    body: JSON.stringify(body),
   });
   updateStatusOverlay();
 }
@@ -44,7 +46,6 @@ async function refreshStatus() {
     opt.disabled = !online;
     backendSelect.appendChild(opt);
   }
-  // Preserve previous selection if it is still online; otherwise pick the first online one.
   if (previous && statuses[previous]) {
     backendSelect.value = previous;
   } else {
@@ -52,6 +53,18 @@ async function refreshStatus() {
     if (firstOnline) backendSelect.value = firstOnline[0];
   }
   updateStatusOverlay();
+}
+
+async function loadInitialState() {
+  try {
+    const r = await fetch("/api/state");
+    const s = await r.json();
+    if (clientNameSpan && s.name) clientNameSpan.textContent = s.name;
+    inferCheckbox.checked = !!s.inference;
+    mockCamCheckbox.checked = !!s.mock_camera;
+  } catch (e) {
+    /* fall through to defaults */
+  }
 }
 
 function toMarkdown(rows) {
@@ -79,8 +92,15 @@ async function refreshStats() {
   statsDiv.innerHTML = `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
 }
 
-backendSelect.addEventListener("change", postControl);
-inferCheckbox.addEventListener("change", postControl);
+backendSelect.addEventListener("change", () =>
+  postControl({ backend: backendSelect.value, inference: inferCheckbox.checked })
+);
+inferCheckbox.addEventListener("change", () =>
+  postControl({ backend: backendSelect.value, inference: inferCheckbox.checked })
+);
+mockCamCheckbox.addEventListener("change", () =>
+  postControl({ mock_camera: mockCamCheckbox.checked })
+);
 clearButton.addEventListener("click", async () => {
   await fetch("/api/clear", { method: "POST" });
   refreshStats();
@@ -108,7 +128,9 @@ copyMdButton.addEventListener("click", async () => {
   }, 2000);
 });
 
-refreshStatus();
-refreshStats();
+loadInitialState().then(() => {
+  refreshStatus();
+  refreshStats();
+});
 setInterval(refreshStatus, STATUS_POLL_MS);
 setInterval(refreshStats, STATS_POLL_MS);

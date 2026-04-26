@@ -11,14 +11,15 @@ from inference_streaming_benchmark.transports.codec import FRAME_SHAPE
 
 _MOCK_IMAGE_PATH = Path(__file__).parents[2] / "resources" / "example_dall_e.png"
 
+CAMERA_MODES = ("real", "mock")
+
 
 class _FakeVideoCapture:
-    """Static 1920×1080 BGR frames for Claude-driven smoke tests.
+    """Static 1920×1080 BGR frames for headless clients and Claude-driven smoke tests.
 
-    Enabled by MOCK_CAMERA=1. Returns the resources/example_dall_e.png image
-    (resized to 1920×1080) with a timestamp overlay at ~30fps. The image
-    contains people, chairs, a dining table, and a laptop so YOLO produces
-    real detections that exercise draw_detections.
+    Returns the resources/example_dall_e.png image (resized to 1920×1080) with a
+    timestamp overlay at ~30fps. The image contains people, chairs, a dining table,
+    and a laptop so YOLO produces real detections.
     """
 
     def __init__(self):
@@ -26,7 +27,7 @@ class _FakeVideoCapture:
         self._released = False
         img = cv2.imread(str(_MOCK_IMAGE_PATH))
         if img is None:
-            raise RuntimeError(f"MOCK_CAMERA: could not load {_MOCK_IMAGE_PATH}")
+            raise RuntimeError(f"mock camera: could not load {_MOCK_IMAGE_PATH}")
         h, w = FRAME_SHAPE[0], FRAME_SHAPE[1]
         self._base = cv2.resize(img, (w, h))
 
@@ -55,11 +56,26 @@ class _FakeVideoCapture:
         self._released = True
 
 
-def _open_camera():
-    if os.environ.get("MOCK_CAMERA") == "1":
-        logger.info("MOCK_CAMERA=1 — using synthesized frame source")
-        return _FakeVideoCapture()
+def _open_real_camera():
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_SHAPE[1])
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_SHAPE[0])
     return cap
+
+
+def _open_mock_camera():
+    return _FakeVideoCapture()
+
+
+def open_camera(mode: str):
+    if mode == "mock":
+        logger.info("camera: mock (synthetic frames)")
+        return _open_mock_camera()
+    if mode == "real":
+        logger.info("camera: real (cv2.VideoCapture)")
+        return _open_real_camera()
+    raise ValueError(f"unknown camera mode: {mode!r} (expected one of {CAMERA_MODES})")
+
+
+def initial_mode_from_env() -> str:
+    return "mock" if os.environ.get("MOCK_CAMERA") == "1" else "real"

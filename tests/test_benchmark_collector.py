@@ -3,7 +3,7 @@ import pytest
 pytest.importorskip("cv2")
 pytest.importorskip("fastapi")
 
-from inference_streaming_benchmark.frontend.state import BenchmarkCollector  # noqa: E402
+from inference_streaming_benchmark.client.state import BenchmarkCollector  # noqa: E402
 
 
 def test_record_derives_comms_and_transmission():
@@ -100,3 +100,27 @@ def test_clear_resets_results():
     assert collector.bench_results
     collector.clear()
     assert collector.bench_results == {}
+
+
+def test_snapshot_for_heartbeat_returns_compact_payload():
+    collector = BenchmarkCollector()
+    for total in (10.0, 20.0, 30.0):
+        collector.record(
+            "grpc",
+            {"encode_ms": 1.0, "decode_ms": 1.0, "infer_ms": 5.0, "post_ms": 0.5, "total_ms": total},
+        )
+
+    out = collector.snapshot_for_heartbeat("grpc")
+    assert out["backend"] == "grpc"
+    assert out["frames"] == 3
+    # Median total of [10, 20, 30] = 20; median infer = 5
+    assert out["total_ms"] == 20.0
+    assert out["infer_ms"] == 5.0
+    # Duration = (10+20+30)/1000 = 0.060 → fps = 3 / 0.060 = 50
+    assert out["fps"] == pytest.approx(50.0)
+
+
+def test_snapshot_for_heartbeat_no_active_returns_empty():
+    collector = BenchmarkCollector()
+    assert collector.snapshot_for_heartbeat(None) == {}
+    assert collector.snapshot_for_heartbeat("grpc") == {}

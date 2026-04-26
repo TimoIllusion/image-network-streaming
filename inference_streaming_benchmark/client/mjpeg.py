@@ -11,10 +11,13 @@ from .state import BenchmarkCollector, CameraHandle, TransportSession
 
 
 def _mjpeg_frames(camera: CameraHandle, session: TransportSession, collector: BenchmarkCollector):
-    """Blocking generator: captures frames, runs inference when enabled, yields MJPEG parts."""
-    cap = camera.ensure()
+    """Blocking generator: captures frames, runs inference when enabled, yields MJPEG parts.
 
+    `camera.ensure()` is called every iteration so a `set_mode()` swap (which releases
+    the current cap) takes effect on the next frame.
+    """
     while True:
+        cap = camera.ensure()
         ret, frame = cap.read()
         if not ret:
             logger.warning("failed to capture frame")

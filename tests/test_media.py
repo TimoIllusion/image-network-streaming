@@ -3,7 +3,7 @@ import pytest
 np = pytest.importorskip("numpy")
 pytest.importorskip("cv2")
 
-from inference_streaming_benchmark.frontend.media import draw_detections, draw_fps
+from inference_streaming_benchmark.client.media import draw_detections, draw_fps
 
 
 def test_draw_helpers_are_deterministic():

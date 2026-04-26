@@ -190,7 +190,11 @@
     <div class="container">
       <header>
         <h1>Webcam Object Detection</h1>
-        <p class="subtitle">Benchmarking image transmission + inference across transports</p>
+        <p class="subtitle">
+          Benchmarking image transmission + inference across transports
+          <span style="margin-left: 0.5rem; color: var(--muted);">·</span>
+          <span style="color: var(--muted);">client: <span id="clientName">—</span></span>
+        </p>
       </header>
 
       <div class="video-wrap">
@@ -213,6 +217,13 @@
               <span class="toggle-slider"></span>
             </label>
             <label for="infer">Object detection</label>
+          </div>
+          <div class="control-group">
+            <label class="toggle" for="mockCam">
+              <input type="checkbox" id="mockCam" />
+              <span class="toggle-slider"></span>
+            </label>
+            <label for="mockCam">Mock camera</label>
           </div>
           <button id="clear">Clear results</button>
           <button id="copyMd">Copy as Markdown</button>

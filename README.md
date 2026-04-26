@@ -36,16 +36,18 @@ pip install -e ".[dev,test]"
 
 ## Run
 
-One AI server process hosts every transport. The frontend picks which protocol is active; the server hot-swaps listeners on demand. Exactly one transport is active at any time.
+One AI server process hosts every transport. A connected client picks which protocol is active; the server hot-swaps listeners on demand. Exactly one transport is active at any time.
 
 ```bash
-python serve.py        # control plane on :9000, http_multipart active by default
-python frontend.py     # http://127.0.0.1:8501 (webcam UI, backend dropdown)
+python serve.py        # control plane + central UI on :9000, http_multipart active by default
+python client.py       # http://127.0.0.1:8501 (webcam UI, backend dropdown, mock-camera toggle)
 ```
+
+Open `http://127.0.0.1:9000/` for the **central operator panel** — registers connected clients, switches transport for everyone with one click, toggles per-client mock camera and inference.
 
 Options:
 - `python serve.py --default zmq` — start with `zmq` active
-- `python serve.py --default none` — idle until the frontend picks a transport
+- `python serve.py --default none` — idle until a client picks a transport
 
 | Transport      | Port  | Description                       |
 | -------------- | ----- | --------------------------------- |
@@ -56,13 +58,45 @@ Options:
 
 >Note: transfer speed for images can be significantly boosted by resizing them before sending. This will usually not cause issues with the ai model, since most models need images of low input sizes like 224x224.
 
+## Multi-device deployment
+
+The server (workstation/GPU box) and clients (RPi5s, laptops, anything with Python) can live on different machines on the same LAN.
+
+**Server (workstation):**
+```bash
+python serve.py
+# central UI: http://<server-ip>:9000/
+```
+
+**Each client device (one per machine):**
+```bash
+INFSB_CONTROL_HOST=<server-ip> INFSB_CLIENT_NAME=rpi-edge-1 python client.py
+# per-device UI: http://<client-ip>:8501/
+```
+
+Clients auto-register with the server on startup and send a heartbeat every second; the central UI shows them in a live table with FPS, latency, and per-client toggles.
+
+**No webcam attached?** Set `MOCK_CAMERA=1` to start with synthetic frames (a static DALL-E image, looped at 30fps), or toggle the **Mock camera** switch in the per-device UI / central UI at runtime — no restart needed.
+
+**Per-transport multi-client behavior** (Option 1: each transport keeps its natural semantics):
+- HTTP multipart, gRPC, WebSocket — fan in concurrently at the network layer; serialize at inference (one shared YOLO instance).
+- ZMQ REQ/REP, ImageZMQ — strictly 1:1 by design. With N clients connected, the server processes one client at a time and the others queue. The central UI surfaces this clearly: one client at full FPS, others starved.
+
+| Env var               | Default              | Purpose                                      |
+| --------------------- | -------------------- | -------------------------------------------- |
+| `INFSB_CONTROL_HOST`  | `localhost`          | Server hostname/IP the client should reach   |
+| `INFSB_CONTROL_PORT`  | `9000`               | Server control plane + central UI port       |
+| `INFSB_UI_PORT`       | `8501`               | Per-device client UI port                    |
+| `INFSB_CLIENT_NAME`   | `socket.gethostname()` | Friendly name shown in the central UI      |
+| `MOCK_CAMERA`         | unset                | `1` → start with synthetic frames           |
+
 ### Adding a new transport
 
 1. Create `inference_streaming_benchmark/transports/<name>/transport.py` with a `class XxxTransport(Transport)` implementing `start` / `stop` / `connect` / `send` / `disconnect`.
 2. In `inference_streaming_benchmark/transports/<name>/__init__.py`, add `register(XxxTransport)`.
 3. Add `from . import <name>` to `inference_streaming_benchmark/transports/__init__.py`.
 
-That's it — the frontend dropdown and server control plane pick it up automatically.
+That's it — the client backend dropdown and server control plane pick it up automatically.
 
 ## Tests
 
@@ -116,12 +150,13 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 - [x] Rename "fastapi" backend to a more descriptive label (e.g. `pure-http-multipart`) that reflects the protocol rather than the framework
 - [x] Replace Streamlit frontend with Flask or a comparable lightweight framework for better control and lower overhead
 - [x] Improve benchmark statistics: add a dedicated "transmission time" column that excludes inference and preprocessing (encode + decode) so pure transport overhead is isolated
-- [ ] Extract a shared `FastAPITransport` base for the duplicated uvicorn lifecycle and `_infer` closure in `http_multipart` and `websocket`
-- [ ] Centralize raw payload codec and `FRAME_SHAPE` in one module (currently redeclared in 4 transport files)
-- [ ] Drop the `*_Raw` subclass pattern in favor of codec injection at registration time
-- [ ] Split `frontend.py` into a `frontend/` package (camera, mjpeg, state, app)
-- [ ] Decompose `FrontendState` into camera, transport-session, and benchmark-collector responsibilities
-- [ ] Consolidate ports/hosts into a single env-driven config module
+- [x] Split `frontend.py` into a package (camera, mjpeg, state, app) — now `inference_streaming_benchmark/client/`
+- [x] Multi-device deployment + central operator panel
+- [x] Extract a shared `FastAPITransport` base for the duplicated uvicorn lifecycle in `http_multipart` and `websocket` (`transports/_fastapi_base.py`)
+- [x] Centralize raw payload codec and `FRAME_SHAPE` in one module (`transports/codec.py`)
+- [x] Drop the `*_Raw` subclass pattern in favor of codec injection at registration time
+- [ ] Consolidate transport `default_port` constants into the env-driven config module (still per-class today)
+- [ ] **Dynamic batching on the inference engine** — coalesce concurrent requests from multiple clients into a single GPU batch so aggregate throughput scales beyond single-stream inference (today, even concurrent-capable transports serialize at the shared YOLO instance)
 
 ## AI Assistance
 

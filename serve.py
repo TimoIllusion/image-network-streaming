@@ -4,7 +4,7 @@ Usage::
 
     python serve.py                      # start with http_multipart active (default)
     python serve.py --default zmq        # start with zmq active
-    python serve.py --default none       # start with no transport active — frontend picks
+    python serve.py --default none       # start with no transport active — a client picks
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ def main() -> None:
     p.add_argument(
         "--default",
         default="http_multipart",
-        help=f"transport to start with. One of {choices + ['none']}. 'none' means idle until the frontend picks one.",
+        help=f"transport to start with. One of {choices + ['none']}. 'none' means idle until a client picks one.",
     )
     args = p.parse_args()
     default = None if args.default == "none" else args.default

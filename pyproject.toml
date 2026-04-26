@@ -65,7 +65,7 @@ include = ["inference_streaming_benchmark*"]
 fallback_version = "0.0.0"
 
 [tool.pytest.ini_options]
-# Put the repo root on sys.path so tests can import top-level `frontend.py`.
+# Put the repo root on sys.path so tests can import top-level `client.py`.
 pythonpath = ["."]
 
 [tool.ruff]
