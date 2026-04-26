@@ -75,9 +75,9 @@ function renderClients(payload) {
       <th>Last seen</th>
       <th>Backend</th>
       <th>FPS</th>
-      <th>total (ms)</th>
+      <th>transport (ms)</th>
       <th>infer (ms)</th>
-      <th>w/o infer (ms)</th>
+      <th>total (ms)</th>
       <th>Frames</th>
       <th>Mock cam</th>
       <th>Inference</th>
@@ -96,9 +96,9 @@ function renderClients(payload) {
         <td class="${ageClass}">${ageLabel(c.age_s || 0)}</td>
         <td>${escapeHtml(backend)}</td>
         <td>${fmt(s.fps, 1)}</td>
-        <td>${fmt(s.total_ms, 1)}</td>
-        <td>${fmt(s.infer_ms, 1)}</td>
         <td>${fmt(s.transmission_ms, 1)}</td>
+        <td>${fmt(s.infer_ms, 1)}</td>
+        <td>${fmt(s.total_ms, 1)}</td>
         <td>${s.frames ?? "—"}</td>
         <td>
           <label class="toggle">

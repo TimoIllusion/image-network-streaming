@@ -2,18 +2,27 @@
 
 Comparison implementation for image transmission and inference response using an AI inference server with multiple communication systems: HTTP multipart (FastAPI), ZeroMQ (ZMQ), ImageZMQ, grpc.
 
-Results for 1920×1080 images on a MacBook Pro M2 Pro (YOLOv8n, MPS inference):
+Results for 1920×1080 images on a MacBook Pro M2 Pro (YOLOv8n, MPS inference).
 
-| Backend            | Frames | Duration (s) | FPS  | enc (ms) | dec (ms) | infer (ms) | post (ms) | comms (ms) | total (ms) | total w/o infer (ms) |
-| ------------------ | ------ | ------------ | ---- | -------- | -------- | ---------- | --------- | ---------- | ---------- | -------------------- |
-| imagezmq           | 149    | 4.5          | 33.0 | 0.0      | 0.0      | 26.0       | 1.3       | 3.1        | 30.6       | 4.4                  |
-| zmq_raw            | 81     | 2.5          | 31.8 | 0.2      | 0.0      | 26.1       | 1.2       | 3.6        | 31.4       | 5.3                  |
-| grpc               | 93     | 6.1          | 15.4 | 0.2      | 0.2      | 22.4       | 0.9       | 6.6        | 30.4       | 8.1                  |
-| websocket_raw      | 271    | 9.3          | 29.1 | 0.3      | 0.0      | 25.0       | 1.3       | 7.2        | 34.2       | 8.9                  |
-| http_multipart_raw | 135    | 4.6          | 29.3 | 0.2      | 0.0      | 24.0       | 1.2       | 7.6        | 33.2       | 9.1                  |
-| http_multipart     | 115    | 5.1          | 22.4 | 5.6      | 8.6      | 23.9       | 1.1       | 3.8        | 43.4       | 19.5                 |
-| zmq                | 117    | 5.2          | 22.5 | 6.6      | 11.0     | 24.3       | 1.4       | 0.9        | 44.4       | 20.0                 |
-| websocket          | 78     | 3.5          | 22.6 | 6.6      | 11.0     | 23.9       | 1.3       | 1.0        | 44.0       | 20.1                 |
+The columns are ordered so the math reads left-to-right:
+
+```
+enc + dec + comms  =  transport     (network + codec overhead)
+                +  infer + post  =  total          (server-side processing)
+```
+
+`post` here is the server-side JSON serialization of detection results for the response, **not** YOLO post-processing (which is already counted inside `infer`).
+
+| Backend            | Frames | Duration (s) | FPS  | enc (ms) | dec (ms) | comms (ms) | **transport (ms)** | infer (ms) | post (ms) | **total (ms)** |
+| ------------------ | ------ | ------------ | ---- | -------- | -------- | ---------- | ------------------ | ---------- | --------- | -------------- |
+| imagezmq           | 149    | 4.5          | 33.0 | 0.0      | 0.0      | 3.1        | 3.1                | 26.0       | 1.3       | 30.6           |
+| zmq_raw            | 81     | 2.5          | 31.8 | 0.2      | 0.0      | 3.6        | 4.1                | 26.1       | 1.2       | 31.4           |
+| grpc               | 93     | 6.1          | 15.4 | 0.2      | 0.2      | 6.6        | 7.2                | 22.4       | 0.9       | 30.4           |
+| websocket_raw      | 271    | 9.3          | 29.1 | 0.3      | 0.0      | 7.2        | 7.6                | 25.0       | 1.3       | 34.2           |
+| http_multipart_raw | 135    | 4.6          | 29.3 | 0.2      | 0.0      | 7.6        | 7.9                | 24.0       | 1.2       | 33.2           |
+| http_multipart     | 115    | 5.1          | 22.4 | 5.6      | 8.6      | 3.8        | 18.4               | 23.9       | 1.1       | 43.4           |
+| zmq                | 117    | 5.2          | 22.5 | 6.6      | 11.0     | 0.9        | 18.6               | 24.3       | 1.4       | 44.4           |
+| websocket          | 78     | 3.5          | 22.6 | 6.6      | 11.0     | 1.0        | 18.8               | 23.9       | 1.3       | 44.0           |
 
 
 ## Setup

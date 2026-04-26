@@ -23,8 +23,8 @@ def test_record_derives_comms_and_transmission():
     bench = collector.bench_results["zmq"]
     # server_ms = 3 + 20 + 1 = 24; comms = 30 − 2 − 24 = 4
     assert bench["comms_ms"] == [4.0]
-    # transmission = 30 − 20 = 10
-    assert bench["transmission_ms"] == [10.0]
+    # transport = total − infer − post = 30 − 20 − 1 = 9 (excludes server-side JSON serialization)
+    assert bench["transmission_ms"] == [9.0]
     # raw columns round-trip unchanged
     assert bench["encode_ms"] == [2.0]
     assert bench["total_ms"] == [30.0]
@@ -47,8 +47,8 @@ def test_record_clamps_negative_comms_to_zero():
         },
     )
     assert collector.bench_results["zmq"]["comms_ms"] == [0.0]
-    # transmission = total − infer = 10 − 1 = 9 (not clamped: positive)
-    assert collector.bench_results["zmq"]["transmission_ms"] == [9.0]
+    # transport = total − infer − post = 10 − 1 − 1 = 8 (not clamped: positive)
+    assert collector.bench_results["zmq"]["transmission_ms"] == [8.0]
 
 
 def test_build_stats_rows_computes_median_fps_and_frame_count():

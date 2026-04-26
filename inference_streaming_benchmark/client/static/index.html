@@ -232,6 +232,11 @@
 
       <div class="card">
         <div id="stats"></div>
+        <p class="hint" style="margin-top: 0.75rem; font-size: 0.78rem; line-height: 1.5;">
+          <strong>enc</strong> + <strong>dec</strong> + <strong>comms</strong> = <strong>transport</strong> (network + codec overhead).
+          <strong>+ infer + post</strong> = <strong>total</strong>.
+          <em>post</em> is server-side JSON serialization of detections, not YOLO postprocessing (that's inside <em>infer</em>).
+        </p>
       </div>
     </div>
 

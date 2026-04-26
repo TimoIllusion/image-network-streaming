@@ -141,6 +141,11 @@
         <div id="clients">
           <p class="hint">Waiting for clients to register&hellip;</p>
         </div>
+        <p class="hint" style="margin-top: 0.75rem; font-size: 0.78rem; line-height: 1.5;">
+          <strong>transport</strong> = network + codec overhead (enc + dec + comms).
+          <strong>infer</strong> = model inference (incl. YOLO pre/postprocess).
+          <strong>total</strong> = transport + infer + post (server-side JSON serialization).
+        </p>
       </div>
     </div>
 

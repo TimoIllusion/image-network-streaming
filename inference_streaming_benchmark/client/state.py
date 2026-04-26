@@ -13,8 +13,9 @@ from inference_streaming_benchmark.transports.base import Transport
 from .camera import CAMERA_MODES, initial_mode_from_env, open_camera
 
 # Columns we collect per frame and show as medians in the stats table.
-# transmission_ms = total - infer: end-to-end cost excluding only AI inference.
-TIMING_COLUMNS = ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "total_ms", "transmission_ms")
+# Order is left-to-right additive: enc + dec + comms = transmission (transport overhead),
+# then + infer + post = total. post_ms is server-side JSON serialization of detections, not transport.
+TIMING_COLUMNS = ("encode_ms", "decode_ms", "comms_ms", "transmission_ms", "infer_ms", "post_ms", "total_ms")
 
 
 class CameraHandle:
@@ -106,7 +107,7 @@ class BenchmarkCollector:
     def record(self, transport_name: str, timings: dict) -> None:
         server_ms = timings.get("decode_ms", 0.0) + timings.get("infer_ms", 0.0) + timings.get("post_ms", 0.0)
         comms_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("encode_ms", 0.0) - server_ms)
-        transmission_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("infer_ms", 0.0))
+        transmission_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("infer_ms", 0.0) - timings.get("post_ms", 0.0))
         timings = {**timings, "comms_ms": comms_ms, "transmission_ms": transmission_ms}
 
         bench = self.bench_results.setdefault(transport_name, {"active_time_s": 0.0, **{col: [] for col in TIMING_COLUMNS}})
@@ -133,7 +134,7 @@ class BenchmarkCollector:
             }
             for col in TIMING_COLUMNS:
                 samples = data[col]
-                abbrevs = {"transmission_ms": "total w/o infer (ms)", "encode_ms": "enc (ms)", "decode_ms": "dec (ms)"}
+                abbrevs = {"transmission_ms": "transport (ms)", "encode_ms": "enc (ms)", "decode_ms": "dec (ms)"}
                 label = abbrevs.get(col, col.replace("_ms", " (ms)"))
                 row[label] = f"{statistics.median(samples):.1f}" if samples else "-"
             rows.append(row)
