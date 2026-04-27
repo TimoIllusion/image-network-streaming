@@ -150,6 +150,7 @@
         background: var(--surface);
       }
       .ghost-btn:hover { color: var(--accent); border-color: var(--accent); }
+      button.copied { color: var(--good); border-color: var(--good); }
 
       .bench-table { font-size: 0.82rem; background: var(--surface); border-radius: 6px; overflow: hidden; }
       .bench-table thead th { padding: 0.4rem 0.5rem; }
@@ -171,6 +172,8 @@
           </div>
           <button id="switchAll" class="primary">Switch all clients</button>
           <button id="clearAll">Clear all stats</button>
+          <button id="copyMd">Copy as Markdown</button>
+          <button id="downloadCsv">Download CSV</button>
           <span class="hint" id="switchStatus"></span>
         </div>
       </div>

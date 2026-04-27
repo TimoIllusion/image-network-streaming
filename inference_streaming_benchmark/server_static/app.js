@@ -4,6 +4,8 @@ const PENDING_TTL_MS = 5000;
 const backendSelect = document.getElementById("backend");
 const switchAllBtn = document.getElementById("switchAll");
 const clearAllBtn = document.getElementById("clearAll");
+const copyMdBtn = document.getElementById("copyMd");
+const downloadCsvBtn = document.getElementById("downloadCsv");
 const switchStatus = document.getElementById("switchStatus");
 const clientsDiv = document.getElementById("clients");
 const clientCount = document.getElementById("clientCount");
@@ -12,6 +14,7 @@ const serverHost = document.getElementById("serverHost");
 serverHost.textContent = window.location.host;
 
 let activeTransport = null;
+let lastClientsPayload = null;
 // Optimistic toggles: keep user-set values visible until the heartbeat catches up
 // or PENDING_TTL_MS elapses. Keyed by `${clientName}:${action}`.
 const pendingChanges = {};
@@ -118,10 +121,80 @@ async function refreshClients() {
   try {
     const r = await fetch("/clients");
     const payload = await r.json();
+    lastClientsPayload = payload;
     renderClients(payload);
   } catch {
     /* transient — try again next tick */
   }
+}
+
+function flattenForExport(payload) {
+  const rows = [];
+  for (const c of payload?.clients || []) {
+    const benchRows = (c.stats || {}).bench_rows || [];
+    for (const r of benchRows) {
+      rows.push({ Client: c.name, ...r });
+    }
+  }
+  return rows;
+}
+
+function toMarkdown(rows) {
+  if (!rows.length) return "";
+  const cols = Object.keys(rows[0]);
+  const header = `| ${cols.join(" | ")} |`;
+  const sep = `| ${cols.map(() => "---").join(" | ")} |`;
+  const body = rows.map((r) => `| ${cols.map((c) => r[c] ?? "").join(" | ")} |`).join("\n");
+  return [header, sep, body].join("\n");
+}
+
+function toCSV(rows) {
+  if (!rows.length) return "";
+  const cols = Object.keys(rows[0]);
+  const esc = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = cols.join(",");
+  const body = rows.map((r) => cols.map((c) => esc(r[c])).join(",")).join("\n");
+  return `${header}\n${body}\n`;
+}
+
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = Object.assign(document.createElement("textarea"), { value: text });
+    Object.assign(ta.style, { position: "fixed", opacity: "0" });
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  }
+}
+
+function downloadFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function flashButton(btn, ok, okText, failText) {
+  const original = btn.textContent;
+  btn.textContent = ok ? okText : failText;
+  btn.classList.toggle("copied", ok);
+  setTimeout(() => {
+    btn.textContent = original;
+    btn.classList.remove("copied");
+  }, 2000);
 }
 
 async function postClientControl(name, body) {
@@ -190,6 +263,27 @@ clearAllBtn.addEventListener("click", async () => {
   const r = await fetch("/clients/clear-all", { method: "POST" });
   if (!r.ok) console.warn("clear-all failed:", await r.text());
   refreshClients();
+});
+
+copyMdBtn.addEventListener("click", async () => {
+  const rows = flattenForExport(lastClientsPayload);
+  if (!rows.length) {
+    flashButton(copyMdBtn, false, "", "No data");
+    return;
+  }
+  const ok = await copyTextToClipboard(toMarkdown(rows));
+  flashButton(copyMdBtn, ok, "Copied!", "Copy failed");
+});
+
+downloadCsvBtn.addEventListener("click", () => {
+  const rows = flattenForExport(lastClientsPayload);
+  if (!rows.length) {
+    flashButton(downloadCsvBtn, false, "", "No data");
+    return;
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  downloadFile(`inference-benchmark-${stamp}.csv`, toCSV(rows), "text/csv;charset=utf-8");
+  flashButton(downloadCsvBtn, true, "Downloaded", "");
 });
 
 refreshTransports();
