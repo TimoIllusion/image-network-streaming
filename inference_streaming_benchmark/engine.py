@@ -47,3 +47,29 @@ class InferenceEngine:
         t2 = time.perf_counter()
         timings = {"infer_ms": (t1 - t0) * 1000, "post_ms": (t2 - t1) * 1000}
         return out, timings
+
+    def infer_batch(self, images: list[np.ndarray]) -> list[tuple[list, dict]]:
+        """Run one model call on a batch and return per-frame (detections, timings).
+
+        Per-frame `detections` keeps the same shape as `infer()` returns for a single
+        image (a length-1 list wrapping the per-image detection list) so the wire
+        envelope's `batched_detections` field is unchanged.
+
+        `infer_ms` is the same wall-clock value for every frame in the batch — that's
+        the latency each caller actually waited for the model. `post_ms` is per-frame
+        (its own JSON serialization cost).
+        """
+        if not images:
+            return []
+        t0 = time.perf_counter()
+        results = self._get_or_load_model()(images)
+        t1 = time.perf_counter()
+        infer_ms = (t1 - t0) * 1000
+
+        out: list[tuple[list, dict]] = []
+        for result in results:
+            tp0 = time.perf_counter()
+            detections = [json.loads(result.to_json())]
+            tp1 = time.perf_counter()
+            out.append((detections, {"infer_ms": infer_ms, "post_ms": (tp1 - tp0) * 1000}))
+        return out

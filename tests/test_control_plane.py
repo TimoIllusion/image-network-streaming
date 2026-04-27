@@ -13,6 +13,29 @@ from inference_streaming_benchmark.server import build_control_app  # noqa: E402
 from inference_streaming_benchmark.transports import registry  # noqa: E402
 
 
+class _FakeBatcher:
+    """Stand-in for Batcher in control-plane tests. Stores state, no worker thread."""
+
+    def __init__(self):
+        self._state = {"enabled": False, "max_batch_size": 8, "max_wait_ms": 10.0}
+
+    def state(self):
+        return dict(self._state)
+
+    def configure(self, *, enabled=None, max_batch_size=None, max_wait_ms=None):
+        if max_batch_size is not None and max_batch_size < 1:
+            raise ValueError("max_batch_size must be >= 1")
+        if max_wait_ms is not None and max_wait_ms < 0:
+            raise ValueError("max_wait_ms must be >= 0")
+        if enabled is not None:
+            self._state["enabled"] = bool(enabled)
+        if max_batch_size is not None:
+            self._state["max_batch_size"] = int(max_batch_size)
+        if max_wait_ms is not None:
+            self._state["max_wait_ms"] = float(max_wait_ms)
+        return dict(self._state)
+
+
 class _FakeServer:
     """Stands in for Server — no sockets, no threads, just records interactions."""
 
@@ -21,6 +44,7 @@ class _FakeServer:
         self.switch_calls: list[str] = []
         self.stop_called = False
         self.fail_on: str | None = None
+        self.batcher = _FakeBatcher()
 
     def switch(self, name: str):
         self.switch_calls.append(name)
@@ -272,6 +296,34 @@ def test_client_clear_proxies_to_client():
             r = client.post("/clients/rpi-1/clear")
     assert r.status_code == 200
     assert sent["url"] == "http://10.0.0.5:8501/api/clear"
+
+
+def test_batching_get_returns_current_state():
+    server = _FakeServer()
+    server.batcher.configure(enabled=True, max_batch_size=12, max_wait_ms=7.5)
+    with TestClient(build_control_app(server)) as client:
+        r = client.get("/batching")
+    assert r.status_code == 200
+    assert r.json() == {"enabled": True, "max_batch_size": 12, "max_wait_ms": 7.5}
+
+
+def test_batching_post_partial_update_persists():
+    server = _FakeServer()
+    with TestClient(build_control_app(server)) as client:
+        r = client.post("/batching", json={"enabled": True, "max_batch_size": 16})
+        assert r.status_code == 200
+        assert r.json() == {"enabled": True, "max_batch_size": 16, "max_wait_ms": 10.0}
+        # Subsequent partial-update only flips the wait window.
+        r = client.post("/batching", json={"max_wait_ms": 25.0})
+        assert r.json() == {"enabled": True, "max_batch_size": 16, "max_wait_ms": 25.0}
+
+
+def test_batching_post_rejects_invalid_values():
+    server = _FakeServer()
+    with TestClient(build_control_app(server)) as client:
+        r = client.post("/batching", json={"max_batch_size": 0})
+    assert r.status_code == 400
+    assert "max_batch_size" in r.json()["detail"]
 
 
 def test_clear_all_proxies_to_each_client_and_summarizes():

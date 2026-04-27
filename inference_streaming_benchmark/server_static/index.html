@@ -176,6 +176,25 @@
           <button id="downloadCsv">Download CSV</button>
           <span class="hint" id="switchStatus"></span>
         </div>
+        <div class="controls" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border);">
+          <div class="control-group">
+            <label class="toggle" for="batchEnabled">
+              <input type="checkbox" id="batchEnabled" />
+              <span class="toggle-slider"></span>
+            </label>
+            <label for="batchEnabled">Dynamic batching</label>
+          </div>
+          <div class="control-group">
+            <label for="batchSize" class="small muted">max size</label>
+            <input id="batchSize" type="number" min="1" step="1" style="width: 4.5rem; font: inherit; padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 6px;" />
+          </div>
+          <div class="control-group">
+            <label for="batchWait" class="small muted">max wait (ms)</label>
+            <input id="batchWait" type="number" min="0" step="1" style="width: 5rem; font: inherit; padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 6px;" />
+          </div>
+          <button id="batchApply">Apply</button>
+          <span class="hint" id="batchStatus"></span>
+        </div>
       </div>
 
       <div class="card">

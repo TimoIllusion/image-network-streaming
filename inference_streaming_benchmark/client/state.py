@@ -14,8 +14,22 @@ from .camera import CAMERA_MODES, initial_mode_from_env, open_camera
 
 # Columns we collect per frame and show as medians in the stats table.
 # Order is left-to-right additive: enc + dec + comms = transmission (transport overhead),
-# then + infer + post = total. post_ms is server-side JSON serialization of detections, not transport.
-TIMING_COLUMNS = ("encode_ms", "decode_ms", "comms_ms", "transmission_ms", "infer_ms", "post_ms", "total_ms")
+# then + queue_wait + infer + post = total. post_ms is server-side JSON serialization of
+# detections (not transport). queue_wait_ms is server-side dynamic-batching queue wait
+# (zero when batching is disabled or pass-through).
+TIMING_COLUMNS = (
+    "encode_ms",
+    "decode_ms",
+    "comms_ms",
+    "transmission_ms",
+    "queue_wait_ms",
+    "infer_ms",
+    "post_ms",
+    "total_ms",
+)
+# Non-time numeric columns. Treated separately from TIMING_COLUMNS so they're not
+# labeled "(ms)" and don't participate in the additive math.
+NUMERIC_COLUMNS = ("batch_size",)
 
 
 class CameraHandle:
@@ -105,16 +119,27 @@ class BenchmarkCollector:
         self.bench_results: dict = {}
 
     def record(self, transport_name: str, timings: dict) -> None:
-        server_ms = timings.get("decode_ms", 0.0) + timings.get("infer_ms", 0.0) + timings.get("post_ms", 0.0)
-        comms_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("encode_ms", 0.0) - server_ms)
-        transmission_ms = max(0.0, timings.get("total_ms", 0.0) - timings.get("infer_ms", 0.0) - timings.get("post_ms", 0.0))
+        infer = timings.get("infer_ms", 0.0)
+        post = timings.get("post_ms", 0.0)
+        queue_wait = timings.get("queue_wait_ms", 0.0)
+        encode = timings.get("encode_ms", 0.0)
+        decode = timings.get("decode_ms", 0.0)
+        total = timings.get("total_ms", 0.0)
+
+        # `transmission` (network + codec only) is total minus everything that's
+        # server-side processing or queueing.
+        comms_ms = max(0.0, total - encode - decode - infer - post - queue_wait)
+        transmission_ms = max(0.0, total - infer - post - queue_wait)
         timings = {**timings, "comms_ms": comms_ms, "transmission_ms": transmission_ms}
 
-        bench = self.bench_results.setdefault(transport_name, {"active_time_s": 0.0, **{col: [] for col in TIMING_COLUMNS}})
-        for col in TIMING_COLUMNS:
+        bench = self.bench_results.setdefault(
+            transport_name,
+            {"active_time_s": 0.0, **{col: [] for col in TIMING_COLUMNS + NUMERIC_COLUMNS}},
+        )
+        for col in TIMING_COLUMNS + NUMERIC_COLUMNS:
             if col in timings:
                 bench[col].append(timings[col])
-        bench["active_time_s"] += timings.get("total_ms", 0.0) / 1000
+        bench["active_time_s"] += total / 1000
 
     def clear(self) -> None:
         self.bench_results = {}
@@ -132,10 +157,19 @@ class BenchmarkCollector:
                 "Duration (s)": f"{duration_s:.1f}",
                 "FPS": f"{len(totals) / duration_s:.1f}" if duration_s > 0 else "-",
             }
+            abbrevs = {
+                "transmission_ms": "transport (ms)",
+                "encode_ms": "enc (ms)",
+                "decode_ms": "dec (ms)",
+                "queue_wait_ms": "wait (ms)",
+            }
             for col in TIMING_COLUMNS:
                 samples = data[col]
-                abbrevs = {"transmission_ms": "transport (ms)", "encode_ms": "enc (ms)", "decode_ms": "dec (ms)"}
                 label = abbrevs.get(col, col.replace("_ms", " (ms)"))
+                row[label] = f"{statistics.median(samples):.1f}" if samples else "-"
+            for col in NUMERIC_COLUMNS:
+                samples = data[col]
+                label = "batch" if col == "batch_size" else col
                 row[label] = f"{statistics.median(samples):.1f}" if samples else "-"
             rows.append(row)
         return rows

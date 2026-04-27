@@ -10,6 +10,11 @@ const switchStatus = document.getElementById("switchStatus");
 const clientsDiv = document.getElementById("clients");
 const clientCount = document.getElementById("clientCount");
 const serverHost = document.getElementById("serverHost");
+const batchEnabledEl = document.getElementById("batchEnabled");
+const batchSizeEl = document.getElementById("batchSize");
+const batchWaitEl = document.getElementById("batchWait");
+const batchApplyBtn = document.getElementById("batchApply");
+const batchStatus = document.getElementById("batchStatus");
 
 serverHost.textContent = window.location.host;
 
@@ -43,6 +48,67 @@ function ageLabel(age_s) {
   if (age_s < 60) return `${age_s.toFixed(1)}s ago`;
   return `${Math.round(age_s / 60)}m ago`;
 }
+
+// Track which fields the user has touched, so periodic refresh doesn't clobber in-progress edits.
+const batchFieldDirty = { enabled: false, max_batch_size: false, max_wait_ms: false };
+
+function markDirty(field) {
+  batchFieldDirty[field] = true;
+}
+
+async function refreshBatching() {
+  try {
+    const r = await fetch("/batching");
+    const s = await r.json();
+    if (!batchFieldDirty.enabled) batchEnabledEl.checked = !!s.enabled;
+    if (!batchFieldDirty.max_batch_size && document.activeElement !== batchSizeEl) {
+      batchSizeEl.value = s.max_batch_size;
+    }
+    if (!batchFieldDirty.max_wait_ms && document.activeElement !== batchWaitEl) {
+      batchWaitEl.value = s.max_wait_ms;
+    }
+  } catch {
+    /* transient */
+  }
+}
+
+async function applyBatching() {
+  const body = {
+    enabled: batchEnabledEl.checked,
+    max_batch_size: parseInt(batchSizeEl.value, 10),
+    max_wait_ms: parseFloat(batchWaitEl.value),
+  };
+  batchApplyBtn.disabled = true;
+  batchStatus.textContent = "applying…";
+  try {
+    const r = await fetch("/batching", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      batchStatus.textContent = `failed: ${txt}`;
+    } else {
+      const s = await r.json();
+      batchEnabledEl.checked = !!s.enabled;
+      batchSizeEl.value = s.max_batch_size;
+      batchWaitEl.value = s.max_wait_ms;
+      batchFieldDirty.enabled = false;
+      batchFieldDirty.max_batch_size = false;
+      batchFieldDirty.max_wait_ms = false;
+      batchStatus.textContent = `applied (${s.enabled ? "on" : "off"}, size ${s.max_batch_size}, wait ${s.max_wait_ms}ms)`;
+      setTimeout(() => { batchStatus.textContent = ""; }, 3000);
+    }
+  } finally {
+    batchApplyBtn.disabled = false;
+  }
+}
+
+batchEnabledEl.addEventListener("change", () => markDirty("enabled"));
+batchSizeEl.addEventListener("input", () => markDirty("max_batch_size"));
+batchWaitEl.addEventListener("input", () => markDirty("max_wait_ms"));
+batchApplyBtn.addEventListener("click", applyBatching);
 
 async function refreshTransports() {
   try {
@@ -288,5 +354,7 @@ downloadCsvBtn.addEventListener("click", () => {
 
 refreshTransports();
 refreshClients();
+refreshBatching();
 setInterval(refreshTransports, POLL_MS * 3);
 setInterval(refreshClients, POLL_MS);
+setInterval(refreshBatching, POLL_MS * 3);

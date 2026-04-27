@@ -99,6 +99,20 @@ Clients auto-register with the server on startup and send a heartbeat every seco
 - HTTP multipart, gRPC, WebSocket — fan in concurrently at the network layer; serialize at inference (one shared YOLO instance).
 - ZMQ REQ/REP, ImageZMQ — strictly 1:1 by design. With N clients connected, the server processes one client at a time and the others queue. The central UI surfaces this clearly: one client at full FPS, others starved.
 
+### Dynamic batching
+
+The server has a built-in batcher in front of the inference engine. When **enabled**, concurrent `infer()` calls are coalesced into a single `model([img1, img2, ...])` call so the GPU gets fed `N` frames per invocation instead of `1`. Aggregate throughput rises with the number of clients sending at once.
+
+Toggle from the **central UI** (top control card): `Dynamic batching` switch + `max size` + `max wait (ms)` + Apply. Or from the API: `POST /batching {enabled, max_batch_size, max_wait_ms}`. Disabled by default — pass-through to `engine.infer` with zero overhead, so existing single-stream numbers stay valid.
+
+Two new columns appear in every stats table:
+- **`wait (ms)`** — how long each frame sat in the batcher's queue before the model call started. Zero when batching is off.
+- **`batch`** — median batch size across the frames recorded for that backend. `1` when batching is off or only one client is in flight.
+
+The `transport (ms)` column is `total − infer − post − wait`, so it stays "network + codec only" even with batching on.
+
+**Caveat for ZMQ/ImageZMQ:** these transports submit one frame at a time (REQ/REP semantics), so the batcher never coalesces — it just adds the `max_wait_ms` timeout penalty. The `batch` column staying at `1` and `wait (ms)` matching `max_wait_ms` makes this visible. Leave batching off for those transports unless you're explicitly studying the trade-off.
+
 | Env var               | Default              | Purpose                                      |
 | --------------------- | -------------------- | -------------------------------------------- |
 | `INFSB_CONTROL_HOST`  | `localhost`          | Server hostname/IP the client should reach   |
@@ -106,6 +120,9 @@ Clients auto-register with the server on startup and send a heartbeat every seco
 | `INFSB_UI_PORT`       | `8501` (auto-fallback) | Per-device client UI port. CLI `--port` overrides. |
 | `INFSB_CLIENT_NAME`   | `<hostname>-<port>`    | Friendly name shown in the central UI. CLI `--name` overrides. |
 | `MOCK_CAMERA`         | unset                | `1` → start with synthetic frames           |
+| `INFSB_BATCH_ENABLED` | `0`                  | `1` → start the server with dynamic batching on |
+| `INFSB_BATCH_SIZE`    | `8`                  | Max frames per batched model call            |
+| `INFSB_BATCH_WAIT_MS` | `10`                 | Max time the batcher waits to fill a batch  |
 
 ### Adding a new transport
 
@@ -173,7 +190,7 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 - [x] Centralize raw payload codec and `FRAME_SHAPE` in one module (`transports/codec.py`)
 - [x] Drop the `*_Raw` subclass pattern in favor of codec injection at registration time
 - [ ] Consolidate transport `default_port` constants into the env-driven config module (still per-class today)
-- [ ] **Dynamic batching on the inference engine** — coalesce concurrent requests from multiple clients into a single GPU batch so aggregate throughput scales beyond single-stream inference (today, even concurrent-capable transports serialize at the shared YOLO instance)
+- [x] **Dynamic batching on the inference engine** — server-side batcher coalesces concurrent requests into a single `model([...])` call. Toggle + tune from the central UI; new `wait (ms)` + `batch` columns surface the effect in every stats table.
 
 ## AI Assistance
 

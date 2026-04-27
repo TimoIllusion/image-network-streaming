@@ -13,8 +13,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from inference_streaming_benchmark.batcher import Batcher
 from inference_streaming_benchmark.client_registry import ClientRegistry
-from inference_streaming_benchmark.config import CONTROL_PORT
+from inference_streaming_benchmark.config import BATCH_ENABLED, BATCH_SIZE, BATCH_WAIT_MS, CONTROL_PORT
 from inference_streaming_benchmark.engine import InferenceEngine
 from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.transports import registry
@@ -42,6 +43,12 @@ class Server:
 
     def __init__(self):
         self.engine = InferenceEngine()
+        self.batcher = Batcher(
+            self.engine,
+            enabled=BATCH_ENABLED,
+            max_batch_size=BATCH_SIZE,
+            max_wait_ms=BATCH_WAIT_MS,
+        )
         self.active: Transport | None = None
         self._lock = threading.Lock()
 
@@ -58,7 +65,7 @@ class Server:
             instance = cls()
             logger.info(f"starting transport: {name} on port {cls.default_port}")
             try:
-                instance.start(cls.default_port, self.engine.infer)
+                instance.start(cls.default_port, self.batcher.infer)
             except Exception:
                 logger.exception(f"failed to start transport {name!r}")
                 raise
@@ -76,6 +83,7 @@ class Server:
                 logger.info(f"stopping transport: {self.active.name}")
                 self.active.stop()
                 self.active = None
+        self.batcher.stop()
 
 
 class SwitchBody(BaseModel):
@@ -98,6 +106,12 @@ class ClientControlBody(BaseModel):
     backend: str | None = None
     inference: bool | None = None
     mock_camera: bool | None = None
+
+
+class BatchingBody(BaseModel):
+    enabled: bool | None = None
+    max_batch_size: int | None = None
+    max_wait_ms: float | None = None
 
 
 def _cascade_to_clients(client_registry: ClientRegistry, transport_name: str) -> None:
@@ -219,6 +233,21 @@ def build_control_app(server: Server, client_registry: ClientRegistry | None = N
         except requests.RequestException as e:
             raise HTTPException(status_code=502, detail=f"client {name} unreachable: {e}") from e
         return r.json()
+
+    @app.get("/batching")
+    def batching_state():
+        return server.batcher.state()
+
+    @app.post("/batching")
+    def batching_set(body: BatchingBody):
+        try:
+            return server.batcher.configure(
+                enabled=body.enabled,
+                max_batch_size=body.max_batch_size,
+                max_wait_ms=body.max_wait_ms,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.post("/clients/clear-all")
     def clients_clear_all():
