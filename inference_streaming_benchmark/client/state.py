@@ -141,21 +141,11 @@ class BenchmarkCollector:
         return rows
 
     def snapshot_for_heartbeat(self, active_transport: str | None) -> dict:
-        """Compact per-backend stats for the central UI's clients table."""
-        if active_transport is None or active_transport not in self.bench_results:
-            return {}
-        data = self.bench_results[active_transport]
-        totals = data["total_ms"]
-        if not totals:
-            return {"backend": active_transport}
-        duration_s = data["active_time_s"]
-        out = {
-            "backend": active_transport,
-            "frames": len(totals),
-            "fps": (len(totals) / duration_s) if duration_s > 0 else 0.0,
-        }
-        for col in ("total_ms", "infer_ms", "transmission_ms"):
-            samples = data[col]
-            if samples:
-                out[col] = float(statistics.median(samples))
-        return out
+        """Heartbeat payload: currently-active backend + full per-backend history.
+
+        `bench_rows` is the same shape as `build_stats_rows()` so the central UI can
+        render a per-client breakdown table identical to the per-device stats table.
+        Carrying all backends each heartbeat means the central UI never loses data
+        when the operator switches transports.
+        """
+        return {"backend": active_transport, "bench_rows": self.build_stats_rows()}

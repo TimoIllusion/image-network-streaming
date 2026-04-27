@@ -32,14 +32,11 @@ processor = FrameProcessor(camera, session, collector)
 
 def _build_heartbeat_stats() -> dict:
     _client, active_transport, infer = session.snapshot()
-    stats = {
+    return {
         "inference": infer,
         "mock_camera": camera.mode == "mock",
+        **collector.snapshot_for_heartbeat(active_transport),
     }
-    stats.update(collector.snapshot_for_heartbeat(active_transport))
-    if "backend" not in stats:
-        stats["backend"] = active_transport
-    return stats
 
 
 @asynccontextmanager

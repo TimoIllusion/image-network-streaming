@@ -208,6 +208,31 @@ def build_control_app(server: Server, client_registry: ClientRegistry | None = N
             raise HTTPException(status_code=502, detail=f"client {name} unreachable: {e}") from e
         return r.json()
 
+    @app.post("/clients/{name}/clear")
+    def client_clear(name: str):
+        record = client_registry.get(name)
+        if record is None:
+            raise HTTPException(status_code=404, detail=f"unknown client: {name}")
+        try:
+            r = requests.post(f"{record.ui_url}/api/clear", timeout=PROXY_TIMEOUT_S)
+            r.raise_for_status()
+        except requests.RequestException as e:
+            raise HTTPException(status_code=502, detail=f"client {name} unreachable: {e}") from e
+        return r.json()
+
+    @app.post("/clients/clear-all")
+    def clients_clear_all():
+        results = {}
+        for record in client_registry.list_active():
+            try:
+                r = requests.post(f"{record.ui_url}/api/clear", timeout=PROXY_TIMEOUT_S)
+                r.raise_for_status()
+                results[record.name] = "ok"
+            except requests.RequestException as e:
+                logger.warning(f"clear-all: {record.name} ({record.ui_url}) failed: {e}")
+                results[record.name] = "failed"
+        return {"results": results}
+
     return app
 
 

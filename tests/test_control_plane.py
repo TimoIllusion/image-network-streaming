@@ -4,6 +4,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+import requests  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from inference_streaming_benchmark import transports  # noqa: F401, E402 — triggers registration
@@ -247,3 +248,54 @@ def test_switch_without_cascade_does_not_post_to_clients():
             r = client.post("/switch", json={"name": "grpc"})  # no cascade flag
     assert r.status_code == 200
     posted.assert_not_called()
+
+
+def test_client_clear_proxies_to_client():
+    reg = ClientRegistry()
+    reg.register("rpi-1", "http://10.0.0.5:8501", "")
+
+    sent = {}
+
+    class _Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"ok": True}
+
+    def _fake_post(url, **_kwargs):
+        sent["url"] = url
+        return _Resp()
+
+    with TestClient(build_control_app(_FakeServer(), reg)) as client:
+        with patch("inference_streaming_benchmark.server.requests.post", side_effect=_fake_post):
+            r = client.post("/clients/rpi-1/clear")
+    assert r.status_code == 200
+    assert sent["url"] == "http://10.0.0.5:8501/api/clear"
+
+
+def test_clear_all_proxies_to_each_client_and_summarizes():
+    reg = ClientRegistry()
+    reg.register("rpi-1", "http://10.0.0.5:8501", "")
+    reg.register("rpi-2", "http://10.0.0.6:8501", "")
+    reg.heartbeat("rpi-1", {})
+    reg.heartbeat("rpi-2", {})
+
+    class _OK:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"ok": True}
+
+    def _fake_post(url, **_kwargs):
+        if "10.0.0.6" in url:
+            raise requests.RequestException("simulated unreachable")
+        return _OK()
+
+    with TestClient(build_control_app(_FakeServer(), reg)) as client:
+        with patch("inference_streaming_benchmark.server.requests.post", side_effect=_fake_post):
+            r = client.post("/clients/clear-all")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["results"] == {"rpi-1": "ok", "rpi-2": "failed"}

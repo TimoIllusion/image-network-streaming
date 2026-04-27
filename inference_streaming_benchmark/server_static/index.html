@@ -104,8 +104,9 @@
       tbody tr:last-child td { border-bottom: none; }
       .age-fresh { color: var(--good); }
       .age-stale { color: var(--danger); }
-      .row-actions { display: flex; gap: 0.5rem; align-items: center; justify-content: flex-end; }
-      a.client-link { color: var(--fg); text-decoration: none; border-bottom: 1px dashed var(--muted); }
+      .small { font-size: 0.78rem; }
+      .muted { color: var(--muted); }
+      a.client-link { color: var(--fg); text-decoration: none; border-bottom: 1px dashed var(--muted); font-weight: 600; }
       a.client-link:hover { color: var(--accent); border-color: var(--accent); }
       .hint { color: var(--muted); font-style: italic; margin: 0; }
       .badge {
@@ -114,6 +115,45 @@
         background: var(--bg); border: 1px solid var(--border); color: var(--muted);
       }
       .badge.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+      /* Per-client cards */
+      .client-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.75rem 0.9rem 0.5rem;
+        margin-bottom: 0.75rem;
+        background: var(--bg);
+      }
+      .client-header {
+        display: flex; flex-wrap: wrap;
+        align-items: center; gap: 0.5rem 1rem;
+        margin-bottom: 0.5rem;
+      }
+      .client-meta { display: flex; align-items: center; gap: 0.6rem; flex: 1 1 auto; flex-wrap: wrap; }
+      .client-controls { display: flex; gap: 0.4rem; align-items: center; }
+      .control-pill {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        padding: 0.2rem 0.55rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        font-size: 0.78rem;
+        background: var(--surface);
+        cursor: pointer;
+        user-select: none;
+      }
+      .control-pill input { margin: 0; cursor: pointer; }
+      .control-pill:has(input:checked) { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .ghost-btn {
+        font-size: 0.78rem;
+        padding: 0.25rem 0.6rem;
+        color: var(--muted);
+        background: var(--surface);
+      }
+      .ghost-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+      .bench-table { font-size: 0.82rem; background: var(--surface); border-radius: 6px; overflow: hidden; }
+      .bench-table thead th { padding: 0.4rem 0.5rem; }
+      .bench-table tbody td { padding: 0.35rem 0.5rem; }
     </style>
   </head>
   <body>
@@ -130,21 +170,23 @@
             <select id="backend"></select>
           </div>
           <button id="switchAll" class="primary">Switch all clients</button>
+          <button id="clearAll">Clear all stats</button>
           <span class="hint" id="switchStatus"></span>
         </div>
       </div>
 
       <div class="card">
-        <h2 style="margin: 0 0 0.5rem 0; font-size: 1.05rem; font-weight: 600;">
+        <h2 style="margin: 0 0 0.75rem 0; font-size: 1.05rem; font-weight: 600;">
           Connected clients <span class="badge" id="clientCount">0</span>
         </h2>
         <div id="clients">
           <p class="hint">Waiting for clients to register&hellip;</p>
         </div>
         <p class="hint" style="margin-top: 0.75rem; font-size: 0.78rem; line-height: 1.5;">
-          <strong>transport</strong> = network + codec overhead (enc + dec + comms).
-          <strong>infer</strong> = model inference (incl. YOLO pre/postprocess).
-          <strong>total</strong> = transport + infer + post (server-side JSON serialization).
+          Each client keeps full per-backend history; switching transports does <strong>not</strong> discard prior data.
+          <br>
+          <strong>enc + dec + comms = transport</strong> (network + codec overhead).
+          <strong>+ infer + post = total</strong>. <em>post</em> is server-side JSON serialization, not YOLO postprocessing.
         </p>
       </div>
     </div>

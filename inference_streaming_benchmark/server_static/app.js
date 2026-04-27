@@ -3,6 +3,7 @@ const PENDING_TTL_MS = 5000;
 
 const backendSelect = document.getElementById("backend");
 const switchAllBtn = document.getElementById("switchAll");
+const clearAllBtn = document.getElementById("clearAll");
 const switchStatus = document.getElementById("switchStatus");
 const clientsDiv = document.getElementById("clients");
 const clientCount = document.getElementById("clientCount");
@@ -12,7 +13,7 @@ serverHost.textContent = window.location.host;
 
 let activeTransport = null;
 // Optimistic toggles: keep user-set values visible until the heartbeat catches up
-// or PENDING_TTL_MS elapses. Keyed by `${clientName}:${action}` (action is mock_camera | inference).
+// or PENDING_TTL_MS elapses. Keyed by `${clientName}:${action}`.
 const pendingChanges = {};
 
 function pendingKey(name, action) {
@@ -30,6 +31,16 @@ function effectiveValue(name, action, serverValue) {
   return p.value;
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
+}
+
+function ageLabel(age_s) {
+  if (age_s < 1) return `${Math.round(age_s * 1000)}ms ago`;
+  if (age_s < 60) return `${age_s.toFixed(1)}s ago`;
+  return `${Math.round(age_s / 60)}m ago`;
+}
+
 async function refreshTransports() {
   try {
     const r = await fetch("/transports");
@@ -45,77 +56,62 @@ async function refreshTransports() {
       if (item.active) activeTransport = item.name;
     }
     backendSelect.value = previous || activeTransport || items[0]?.name || "";
-  } catch (e) {
+  } catch {
     /* server might be reloading; the next tick will retry */
   }
 }
 
-function ageLabel(age_s) {
-  if (age_s < 1) return `${Math.round(age_s * 1000)}ms ago`;
-  if (age_s < 60) return `${age_s.toFixed(1)}s ago`;
-  return `${Math.round(age_s / 60)}m ago`;
+function renderBenchTable(rows) {
+  if (!rows || !rows.length) {
+    return '<p class="hint small">No data yet — enable inference to start collecting. Switching transports preserves prior data.</p>';
+  }
+  const cols = Object.keys(rows[0]);
+  const head = cols.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+  const body = rows
+    .map((r) => `<tr>${cols.map((c) => `<td>${escapeHtml(r[c])}</td>`).join("")}</tr>`)
+    .join("");
+  return `<table class="bench-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
+function renderClientCard(c) {
+  const s = c.stats || {};
+  const ageClass = c.age_s < 5 ? "age-fresh" : "age-stale";
+  const mockChecked = effectiveValue(c.name, "mock_camera", !!s.mock_camera) ? "checked" : "";
+  const inferChecked = effectiveValue(c.name, "inference", !!s.inference) ? "checked" : "";
+  const benchRows = s.bench_rows || [];
+
+  return `
+    <div class="client-card">
+      <div class="client-header">
+        <div class="client-meta">
+          <a class="client-link" href="${escapeHtml(c.ui_url)}" target="_blank" rel="noopener">${escapeHtml(c.name)}</a>
+          <span class="${ageClass} small">${ageLabel(c.age_s || 0)}</span>
+          <span class="muted small">backend: <strong>${escapeHtml(s.backend || "—")}</strong></span>
+        </div>
+        <div class="client-controls">
+          <label class="control-pill">
+            <input type="checkbox" data-action="mock_camera" data-name="${escapeHtml(c.name)}" ${mockChecked} />
+            <span>mock cam</span>
+          </label>
+          <label class="control-pill">
+            <input type="checkbox" data-action="inference" data-name="${escapeHtml(c.name)}" ${inferChecked} />
+            <span>inference</span>
+          </label>
+          <button class="ghost-btn" data-clear="${escapeHtml(c.name)}">Clear</button>
+        </div>
+      </div>
+      ${renderBenchTable(benchRows)}
+    </div>`;
 }
 
 function renderClients(payload) {
   const rows = payload.clients || [];
   clientCount.textContent = String(rows.length);
-
   if (!rows.length) {
     clientsDiv.innerHTML = '<p class="hint">No clients connected. Start a client with <code>INFSB_CONTROL_HOST</code> pointing here.</p>';
     return;
   }
-
-  const head = `
-    <thead><tr>
-      <th>Name</th>
-      <th>Last seen</th>
-      <th>Backend</th>
-      <th>FPS</th>
-      <th>transport (ms)</th>
-      <th>infer (ms)</th>
-      <th>total (ms)</th>
-      <th>Frames</th>
-      <th>Mock cam</th>
-      <th>Inference</th>
-    </tr></thead>`;
-
-  const body = rows.map((c) => {
-    const s = c.stats || {};
-    const ageClass = c.age_s < 5 ? "age-fresh" : "age-stale";
-    const fmt = (v, d = 1) => (typeof v === "number" ? v.toFixed(d) : "—");
-    const mockChecked = effectiveValue(c.name, "mock_camera", !!s.mock_camera) ? "checked" : "";
-    const inferChecked = effectiveValue(c.name, "inference", !!s.inference) ? "checked" : "";
-    const backend = s.backend || "—";
-    return `
-      <tr>
-        <td><a class="client-link" href="${escapeHtml(c.ui_url)}" target="_blank" rel="noopener">${escapeHtml(c.name)}</a></td>
-        <td class="${ageClass}">${ageLabel(c.age_s || 0)}</td>
-        <td>${escapeHtml(backend)}</td>
-        <td>${fmt(s.fps, 1)}</td>
-        <td>${fmt(s.transmission_ms, 1)}</td>
-        <td>${fmt(s.infer_ms, 1)}</td>
-        <td>${fmt(s.total_ms, 1)}</td>
-        <td>${s.frames ?? "—"}</td>
-        <td>
-          <label class="toggle">
-            <input type="checkbox" data-action="mock_camera" data-name="${escapeHtml(c.name)}" ${mockChecked} />
-            <span class="toggle-slider"></span>
-          </label>
-        </td>
-        <td>
-          <label class="toggle">
-            <input type="checkbox" data-action="inference" data-name="${escapeHtml(c.name)}" ${inferChecked} />
-            <span class="toggle-slider"></span>
-          </label>
-        </td>
-      </tr>`;
-  }).join("");
-
-  clientsDiv.innerHTML = `<table>${head}<tbody>${body}</tbody></table>`;
+  clientsDiv.innerHTML = rows.map(renderClientCard).join("");
 }
 
 async function refreshClients() {
@@ -123,7 +119,7 @@ async function refreshClients() {
     const r = await fetch("/clients");
     const payload = await r.json();
     renderClients(payload);
-  } catch (e) {
+  } catch {
     /* transient — try again next tick */
   }
 }
@@ -134,10 +130,13 @@ async function postClientControl(name, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!r.ok) {
-    const txt = await r.text();
-    console.warn(`control failed for ${name}:`, txt);
-  }
+  if (!r.ok) console.warn(`control failed for ${name}:`, await r.text());
+}
+
+async function postClientClear(name) {
+  const r = await fetch(`/clients/${encodeURIComponent(name)}/clear`, { method: "POST" });
+  if (!r.ok) console.warn(`clear failed for ${name}:`, await r.text());
+  refreshClients();
 }
 
 clientsDiv.addEventListener("change", (ev) => {
@@ -149,10 +148,16 @@ clientsDiv.addEventListener("change", (ev) => {
   pendingChanges[pendingKey(name, action)] = { value: el.checked, expiresAt: Date.now() + PENDING_TTL_MS };
   const body = { [action]: el.checked };
   if (action === "inference" && el.checked && activeTransport) {
-    // Without a backend hint the client would have to query the server; pass it explicitly to skip a round-trip.
     body.backend = activeTransport;
   }
   postClientControl(name, body);
+});
+
+clientsDiv.addEventListener("click", (ev) => {
+  const el = ev.target;
+  if (!(el instanceof HTMLButtonElement)) return;
+  const clearName = el.dataset.clear;
+  if (clearName) postClientClear(clearName);
 });
 
 switchAllBtn.addEventListener("click", async () => {
@@ -167,8 +172,7 @@ switchAllBtn.addEventListener("click", async () => {
       body: JSON.stringify({ name, cascade: true }),
     });
     if (!r.ok) {
-      const txt = await r.text();
-      switchStatus.textContent = `failed: ${txt}`;
+      switchStatus.textContent = `failed: ${await r.text()}`;
     } else {
       switchStatus.textContent = `switched to ${name}`;
       setTimeout(() => { switchStatus.textContent = ""; }, 3000);
@@ -179,6 +183,13 @@ switchAllBtn.addEventListener("click", async () => {
     switchAllBtn.disabled = false;
     refreshTransports();
   }
+});
+
+clearAllBtn.addEventListener("click", async () => {
+  if (!confirm("Clear stats on all connected clients?")) return;
+  const r = await fetch("/clients/clear-all", { method: "POST" });
+  if (!r.ok) console.warn("clear-all failed:", await r.text());
+  refreshClients();
 });
 
 refreshTransports();

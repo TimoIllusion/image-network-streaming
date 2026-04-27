@@ -102,25 +102,30 @@ def test_clear_resets_results():
     assert collector.bench_results == {}
 
 
-def test_snapshot_for_heartbeat_returns_compact_payload():
+def test_snapshot_for_heartbeat_returns_active_backend_and_bench_rows():
+    """Heartbeat carries the active backend label plus the full per-backend breakdown,
+    so the central UI never loses data when the operator switches transports."""
     collector = BenchmarkCollector()
     for total in (10.0, 20.0, 30.0):
         collector.record(
             "grpc",
             {"encode_ms": 1.0, "decode_ms": 1.0, "infer_ms": 5.0, "post_ms": 0.5, "total_ms": total},
         )
+    collector.record(
+        "imagezmq",
+        {"encode_ms": 0.0, "decode_ms": 0.0, "infer_ms": 6.0, "post_ms": 0.5, "total_ms": 25.0},
+    )
 
-    out = collector.snapshot_for_heartbeat("grpc")
-    assert out["backend"] == "grpc"
-    assert out["frames"] == 3
-    # Median total of [10, 20, 30] = 20; median infer = 5
-    assert out["total_ms"] == 20.0
-    assert out["infer_ms"] == 5.0
-    # Duration = (10+20+30)/1000 = 0.060 → fps = 3 / 0.060 = 50
-    assert out["fps"] == pytest.approx(50.0)
+    out = collector.snapshot_for_heartbeat("imagezmq")
+    assert out["backend"] == "imagezmq"
+    rows_by_backend = {r["Backend"]: r for r in out["bench_rows"]}
+    # Both backends present even though only imagezmq is currently active.
+    assert set(rows_by_backend) == {"grpc", "imagezmq"}
+    assert rows_by_backend["grpc"]["Frames"] == 3
+    assert rows_by_backend["imagezmq"]["Frames"] == 1
 
 
-def test_snapshot_for_heartbeat_no_active_returns_empty():
+def test_snapshot_for_heartbeat_with_no_data_yields_empty_rows():
     collector = BenchmarkCollector()
-    assert collector.snapshot_for_heartbeat(None) == {}
-    assert collector.snapshot_for_heartbeat("grpc") == {}
+    out = collector.snapshot_for_heartbeat(None)
+    assert out == {"backend": None, "bench_rows": []}
