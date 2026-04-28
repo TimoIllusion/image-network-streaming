@@ -2,13 +2,30 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import ClassVar
+from uuid import uuid4
 
 import numpy as np
 
 Detections = list[dict]
 Timings = dict[str, float]
-Handler = Callable[[np.ndarray], tuple[Detections, Timings]]
+
+
+@dataclass(frozen=True)
+class InferenceRequest:
+    image: np.ndarray
+    client_name: str = "unknown"
+    request_id: str = field(default_factory=lambda: uuid4().hex[:12])
+    transport: str = "unknown"
+    received_at: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not self.request_id:
+            object.__setattr__(self, "request_id", uuid4().hex[:12])
+
+
+Handler = Callable[[InferenceRequest], tuple[Detections, Timings]]
 
 
 class Transport(ABC):
@@ -36,7 +53,13 @@ class Transport(ABC):
     def connect(self, host: str, port: int) -> None: ...
 
     @abstractmethod
-    def send(self, frame: np.ndarray) -> tuple[Detections | None, Timings]: ...
+    def send(
+        self,
+        frame: np.ndarray,
+        *,
+        client_name: str = "unknown",
+        request_id: str | None = None,
+    ) -> tuple[Detections | None, Timings]: ...
 
     @abstractmethod
     def disconnect(self) -> None: ...

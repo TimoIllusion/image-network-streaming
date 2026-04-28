@@ -106,7 +106,7 @@ The server has a built-in batcher in front of the inference engine. When **enabl
 Toggle from the **central UI** (top control card): `Dynamic batching` switch + `max size` + `max wait (ms)` + Apply. Or from the API: `POST /batching {enabled, max_batch_size, max_wait_ms}`. Disabled by default — pass-through to `engine.infer` with zero overhead, so existing single-stream numbers stay valid.
 
 Two new columns appear in every stats table:
-- **`wait (ms)`** — how long each frame sat in the batcher's queue before the model call started. Zero when batching is off.
+- **`wait (ms)`** — total pre-inference wait before the model call started. Zero when batching is off. In logs this is split into `backlog_wait` (queued behind earlier inference work) and `batch_fill_wait` (waiting for more frames in the current batch window), so total wait can exceed `max wait` when the worker is already busy.
 - **`batch`** — median batch size across the frames recorded for that backend. `1` when batching is off or only one client is in flight.
 
 The `transport (ms)` column is `total − infer − post − wait`, so it stays "network + codec only" even with batching on.
@@ -191,9 +191,8 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 - [x] Drop the `*_Raw` subclass pattern in favor of codec injection at registration time
 - [ ] Consolidate transport `default_port` constants into the env-driven config module (still per-class today)
 - [x] **Dynamic batching on the inference engine** — server-side batcher coalesces concurrent requests into a single `model([...])` call. Toggle + tune from the central UI; new `wait (ms)` + `batch` columns surface the effect in every stats table.
-- [ ] Improve logging for batching and inference in general
+- [x] Improve logging for batching and inference in general — Ultralytics per-frame console timing is silenced, duplicate HTTP timing logs are debug-only, and server logs now include request id, client, transport, direct/batch mode, queue wait split into backlog/batch-fill, batch size, inference, postprocess, and total server timing where available.
 
 ## AI Assistance
 
 Development of this project was supported by AI, which provided code suggestions and troubleshooting help.
-

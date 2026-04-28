@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
 
@@ -8,7 +9,7 @@ import zmq
 
 from inference_streaming_benchmark.logging import logger
 
-from ..base import Handler, Transport
+from ..base import Handler, InferenceRequest, Transport
 from ..codec import decode, encode
 from ..envelope import build, unpack
 
@@ -46,13 +47,27 @@ class ZMQTransport(Transport):
             logger.info(f"{log_name} transport listening on tcp://*:{port}")
             while not self._stop_event.is_set():
                 try:
-                    image_data = self._server_socket.recv()
+                    parts = self._server_socket.recv_multipart()
                 except zmq.Again:
                     continue
+                if len(parts) == 1:
+                    meta = {}
+                    image_data = parts[0]
+                else:
+                    meta = json.loads(parts[0].decode())
+                    image_data = parts[1]
                 t0 = time.perf_counter()
                 image = decode(image_data, raw=raw)
                 decode_ms = (time.perf_counter() - t0) * 1000
-                detections, timings = handler(image)
+                detections, timings = handler(
+                    InferenceRequest(
+                        image=image,
+                        client_name=meta.get("client_name", "unknown"),
+                        request_id=meta.get("request_id", ""),
+                        transport=log_name,
+                        received_at=t0,
+                    )
+                )
                 timings["decode_ms"] = decode_ms
                 self._server_socket.send_json(build(detections, timings))
 
@@ -83,7 +98,7 @@ class ZMQTransport(Transport):
         self._client_ctx = ctx
         self._client_socket = socket
 
-    def send(self, frame: np.ndarray):
+    def send(self, frame: np.ndarray, *, client_name: str = "unknown", request_id: str | None = None):
         socket = self._client_socket
         timings: dict[str, float] = {}
         if socket is None:
@@ -94,7 +109,8 @@ class ZMQTransport(Transport):
             payload = encode(frame, raw=self.RAW)
             timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
-            socket.send(payload)
+            meta = json.dumps({"client_name": client_name, "request_id": request_id or ""}).encode()
+            socket.send_multipart([meta, payload])
             response = socket.recv_json()
             timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 

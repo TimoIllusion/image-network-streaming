@@ -22,7 +22,12 @@ WebSocketRawTransport = registry.get("websocket_raw")
 def test_end_to_end(cls, port, monkeypatch):
     fake_detections = [[{"box": {"x1": 10, "y1": 20, "x2": 30, "y2": 40}, "confidence": 0.99, "class": 0, "name": "object"}]]
 
-    def fake_handler(_image):
+    seen = {}
+
+    def fake_handler(request):
+        seen["client_name"] = request.client_name
+        seen["request_id"] = request.request_id
+        seen["transport"] = request.transport
         return fake_detections, {"infer_ms": 1.0, "post_ms": 0.1}
 
     import inference_streaming_benchmark.transports.codec as codec_mod
@@ -36,10 +41,11 @@ def test_end_to_end(cls, port, monkeypatch):
         client.connect("127.0.0.1", port)
         try:
             frame = np.zeros((4, 4, 3), dtype=np.uint8)
-            detections, timings = client.send(frame)
+            detections, timings = client.send(frame, client_name="client-ws", request_id="req-ws")
             assert detections == fake_detections[0]
             assert "decode_ms" in timings
             assert "infer_ms" in timings
+            assert seen == {"client_name": "client-ws", "request_id": "req-ws", "transport": cls.name}
         finally:
             client.disconnect()
     finally:

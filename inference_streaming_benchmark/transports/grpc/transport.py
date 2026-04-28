@@ -8,7 +8,7 @@ import numpy as np
 
 from inference_streaming_benchmark.logging import logger
 
-from ..base import Handler, Transport
+from ..base import Handler, InferenceRequest, Transport
 from ..codec import FRAME_SHAPE
 from .ai_server_pb2 import (
     BoundingBox,
@@ -34,6 +34,7 @@ class _Servicer(AiDetectionServiceServicer):
         self._handler = handler
 
     def Detect(self, request, context):
+        meta = dict(context.invocation_metadata())
         t0 = time.perf_counter()
         # gRPC sends raw ndarray bytes — decode is a cheap reshape, not JPEG.
         image = np.frombuffer(request.image, dtype=np.uint8).reshape(FRAME_SHAPE)
@@ -41,7 +42,15 @@ class _Servicer(AiDetectionServiceServicer):
             image = image[..., :3]
         t1 = time.perf_counter()
 
-        detections_batched, infer_timings = self._handler(image)
+        detections_batched, infer_timings = self._handler(
+            InferenceRequest(
+                image=image,
+                client_name=meta.get("x-infsb-client", "unknown"),
+                request_id=meta.get("x-infsb-request-id", ""),
+                transport="grpc",
+                received_at=t0,
+            )
+        )
 
         results_proto = []
         for detections in detections_batched:
@@ -57,6 +66,14 @@ class _Servicer(AiDetectionServiceServicer):
             decode_ms=(t1 - t0) * 1000,
             infer_ms=infer_timings.get("infer_ms", 0.0),
             post_ms=infer_timings.get("post_ms", 0.0),
+        )
+        context.set_trailing_metadata(
+            (
+                ("x-infsb-queue-wait-ms", str(infer_timings.get("queue_wait_ms", 0.0))),
+                ("x-infsb-backlog-wait-ms", str(infer_timings.get("backlog_wait_ms", 0.0))),
+                ("x-infsb-batch-fill-wait-ms", str(infer_timings.get("batch_fill_wait_ms", 0.0))),
+                ("x-infsb-batch-size", str(infer_timings.get("batch_size", 1))),
+            )
         )
         return DetectionResponse(results=results_proto, timings=timings)
 
@@ -95,7 +112,7 @@ class GRPCTransport(Transport):
         self._channel = channel
         self._stub = AiDetectionServiceStub(channel)
 
-    def send(self, frame: np.ndarray):
+    def send(self, frame: np.ndarray, *, client_name: str = "unknown", request_id: str | None = None):
         stub = self._stub
         timings: dict[str, float] = {}
         if stub is None:
@@ -108,11 +125,20 @@ class GRPCTransport(Transport):
 
             # 5s deadline matches the cascade window — without it a server teardown
             # mid-RPC could keep the call hanging until grpc's default keepalive trips.
-            response = stub.Detect(FrameRequest(image=frame_bytes), timeout=5.0)
+            response, call = stub.Detect.with_call(
+                FrameRequest(image=frame_bytes),
+                timeout=5.0,
+                metadata=(("x-infsb-client", client_name), ("x-infsb-request-id", request_id or "")),
+            )
             timings["total_ms"] = (time.perf_counter() - t_total) * 1000
             timings["decode_ms"] = response.timings.decode_ms
             timings["infer_ms"] = response.timings.infer_ms
             timings["post_ms"] = response.timings.post_ms
+            trailing = dict(call.trailing_metadata() or ())
+            timings["queue_wait_ms"] = float(trailing.get("x-infsb-queue-wait-ms", 0.0))
+            timings["backlog_wait_ms"] = float(trailing.get("x-infsb-backlog-wait-ms", 0.0))
+            timings["batch_fill_wait_ms"] = float(trailing.get("x-infsb-batch-fill-wait-ms", 0.0))
+            timings["batch_size"] = float(trailing.get("x-infsb-batch-size", 1))
 
             if not response.results:
                 return None, timings

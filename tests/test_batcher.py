@@ -4,6 +4,7 @@ import time
 import pytest
 
 from inference_streaming_benchmark.batcher import Batcher
+from inference_streaming_benchmark.transports.base import InferenceRequest
 
 
 class _FakeEngine:
@@ -35,10 +36,39 @@ def test_passthrough_when_disabled_does_not_use_queue():
         assert detections == [{"img": "img-A"}]
         # Pass-through still annotates the timings so downstream columns are stable.
         assert timings["queue_wait_ms"] == 0.0
+        assert timings["backlog_wait_ms"] == 0.0
+        assert timings["batch_fill_wait_ms"] == 0.0
         assert timings["batch_size"] == 1
         # infer was used, not infer_batch.
         assert engine.infer_calls == 1
         assert engine.infer_batch_calls == []
+    finally:
+        batcher.stop()
+
+
+def test_passthrough_logs_request_metadata(monkeypatch):
+    engine = _FakeEngine()
+    batcher = Batcher(engine, enabled=False)
+    messages = []
+    monkeypatch.setattr("inference_streaming_benchmark.batcher.logger.info", messages.append)
+    try:
+        request = InferenceRequest(
+            image="img-A",
+            client_name="client-a",
+            request_id="req-1",
+            transport="http_multipart",
+        )
+        batcher.infer(request)
+        assert any(
+            "request_id=req-1" in msg
+            and "client=client-a" in msg
+            and "transport=http_multipart" in msg
+            and "mode=direct" in msg
+            and "batch_size=1" in msg
+            and "backlog_wait=0.0ms" in msg
+            and "batch_fill_wait=0.0ms" in msg
+            for msg in messages
+        )
     finally:
         batcher.stop()
 
@@ -70,6 +100,57 @@ def test_enabled_coalesces_concurrent_calls_into_one_batch():
             assert detections == [{"img": f"img-{i}"}]
             assert timings["batch_size"] == 4
             assert timings["queue_wait_ms"] >= 0.0
+            assert timings["backlog_wait_ms"] >= 0.0
+            assert timings["batch_fill_wait_ms"] >= 0.0
+            assert timings["queue_wait_ms"] == pytest.approx(
+                timings["backlog_wait_ms"] + timings["batch_fill_wait_ms"],
+                abs=0.001,
+            )
+    finally:
+        batcher.stop()
+
+
+def test_enabled_logs_batch_dispatch_and_request_metadata(monkeypatch):
+    engine = _FakeEngine()
+    batcher = Batcher(engine, enabled=True, max_batch_size=2, max_wait_ms=20.0)
+    messages = []
+    monkeypatch.setattr("inference_streaming_benchmark.batcher.logger.info", messages.append)
+    try:
+        results = [None] * 2
+
+        def call(idx):
+            results[idx] = batcher.infer(
+                InferenceRequest(
+                    image=f"img-{idx}",
+                    client_name=f"client-{idx}",
+                    request_id=f"req-{idx}",
+                    transport="websocket",
+                )
+            )
+
+        threads = [threading.Thread(target=call, args=(i,)) for i in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=2.0)
+
+        assert any(
+            "batch dispatch size=2"
+            and "backlog_wait_max=" in msg
+            and "batch_fill_wait_max=" in msg
+            and "client-0" in msg
+            and "client-1" in msg
+            for msg in messages
+        )
+        assert any(
+            "request_id=req-0" in msg
+            and "mode=batch" in msg
+            and "batch_size=2" in msg
+            and "backlog_wait=" in msg
+            and "batch_fill_wait=" in msg
+            for msg in messages
+        )
+        assert any("request_id=req-1" in msg and "mode=batch" in msg and "batch_size=2" in msg for msg in messages)
     finally:
         batcher.stop()
 

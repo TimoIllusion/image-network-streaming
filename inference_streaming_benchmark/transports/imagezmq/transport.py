@@ -9,7 +9,7 @@ import numpy as np
 
 from inference_streaming_benchmark.logging import logger
 
-from ..base import Handler, Transport
+from ..base import Handler, InferenceRequest, Transport
 from ..envelope import build, unpack
 
 
@@ -39,13 +39,22 @@ class ImageZMQTransport(Transport):
             self._hub.zmq_socket.RCVTIMEO = 100
             while not self._stop_event.is_set():
                 try:
-                    _, image = self._hub.recv_image()
+                    name, image = self._hub.recv_image()
                 except Exception:
                     # imagezmq surfaces zmq.Again as a generic exception; just retry.
                     continue
+                client_name, sep, request_id = name.partition("|")
                 # imagezmq delivers a numpy ndarray directly — no JPEG decode on our side.
                 decode_ms = 0.0
-                detections, timings = handler(image)
+                detections, timings = handler(
+                    InferenceRequest(
+                        image=image,
+                        client_name=client_name or "unknown",
+                        request_id=request_id if sep else "",
+                        transport="imagezmq",
+                        received_at=time.perf_counter(),
+                    )
+                )
                 timings["decode_ms"] = decode_ms
                 self._hub.send_reply(json.dumps(build(detections, timings)).encode())
 
@@ -71,14 +80,14 @@ class ImageZMQTransport(Transport):
         sender.zmq_socket.RCVTIMEO = 5000
         self._sender = sender
 
-    def send(self, frame: np.ndarray):
+    def send(self, frame: np.ndarray, *, client_name: str = "unknown", request_id: str | None = None):
         sender = self._sender
         timings: dict[str, float] = {"encode_ms": 0.0}
         if sender is None:
             return None, timings
         try:
             t_total = time.perf_counter()
-            response_bytes = sender.send_image("frame", frame)
+            response_bytes = sender.send_image(f"{client_name}|{request_id or ''}", frame)
             timings["total_ms"] = (time.perf_counter() - t_total) * 1000
             detections, server_timings = unpack(json.loads(response_bytes))
             timings.update(server_timings)

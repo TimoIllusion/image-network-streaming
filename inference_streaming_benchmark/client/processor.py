@@ -4,6 +4,7 @@ import threading
 
 import numpy as np
 
+from inference_streaming_benchmark.config import CLIENT_NAME
 from inference_streaming_benchmark.logging import logger
 
 from .media import draw_detections, draw_fps
@@ -31,6 +32,7 @@ class FrameProcessor:
         self._latest: np.ndarray | None = None
         self._lock = threading.Lock()
         self._viewers = 0
+        self._request_seq = 0
         self._viewers_lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -88,7 +90,13 @@ class FrameProcessor:
 
             if infer and active_client is not None and active_transport is not None:
                 try:
-                    detections, timings = active_client.send(frame)
+                    self._request_seq += 1
+                    request_id = f"{CLIENT_NAME}-{self._request_seq:06d}"
+                    detections, timings = active_client.send(
+                        frame,
+                        client_name=CLIENT_NAME,
+                        request_id=request_id,
+                    )
                     self.collector.record(active_transport, timings)
                     fps = 1000 / timings["total_ms"] if timings.get("total_ms", 0) > 0 else 0
                     if detections is not None:

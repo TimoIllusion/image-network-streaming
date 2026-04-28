@@ -41,7 +41,7 @@ class InferenceEngine:
 
     def infer(self, image: np.ndarray) -> tuple[list[dict], dict]:
         t0 = time.perf_counter()
-        results = self._get_or_load_model()(image)
+        results = self._get_or_load_model()(image, verbose=False)
         t1 = time.perf_counter()
         out = [json.loads(result.to_json()) for result in results]
         t2 = time.perf_counter()
@@ -62,7 +62,7 @@ class InferenceEngine:
         if not images:
             return []
         t0 = time.perf_counter()
-        results = self._get_or_load_model()(images)
+        results = self._get_or_load_model()(images, verbose=False)
         t1 = time.perf_counter()
         infer_ms = (t1 - t0) * 1000
 
