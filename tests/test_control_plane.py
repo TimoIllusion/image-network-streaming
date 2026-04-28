@@ -228,6 +228,70 @@ def test_client_control_empty_body_is_400():
     assert r.status_code == 400
 
 
+def test_clients_control_all_proxies_to_each_client_and_summarizes():
+    reg = ClientRegistry()
+    reg.register("rpi-1", "http://10.0.0.5:8501", "")
+    reg.register("rpi-2", "http://10.0.0.6:8501", "")
+    reg.heartbeat("rpi-1", {})
+    reg.heartbeat("rpi-2", {})
+    server = _FakeServer()
+
+    posted: list[tuple[str, dict]] = []
+
+    class _OK:
+        def raise_for_status(self):
+            pass
+
+    def _fake_post(url, json=None, **_kwargs):
+        posted.append((url, json))
+        if "10.0.0.6" in url:
+            raise requests.RequestException("simulated unreachable")
+        return _OK()
+
+    with TestClient(build_control_app(server, reg)) as client:
+        with patch("inference_streaming_benchmark.server.requests.post", side_effect=_fake_post):
+            r = client.post("/clients/control-all", json={"backend": "grpc", "inference": True})
+
+    assert r.status_code == 200
+    assert server.switch_calls == ["grpc"]
+    assert r.json()["results"] == {"rpi-1": "ok", "rpi-2": "failed"}
+    assert sorted(url for url, _body in posted) == [
+        "http://10.0.0.5:8501/api/control",
+        "http://10.0.0.6:8501/api/control",
+    ]
+    assert all(body == {"backend": "grpc", "inference": True} for _url, body in posted)
+
+
+def test_clients_control_all_strips_none_and_rejects_empty_body():
+    reg = ClientRegistry()
+    reg.register("rpi-1", "http://10.0.0.5:8501", "")
+    reg.heartbeat("rpi-1", {})
+    sent = {}
+
+    class _OK:
+        def raise_for_status(self):
+            pass
+
+    def _fake_post(_url, json=None, **_kwargs):
+        sent["json"] = json
+        return _OK()
+
+    with TestClient(build_control_app(_FakeServer(), reg)) as client:
+        with patch("inference_streaming_benchmark.server.requests.post", side_effect=_fake_post):
+            r = client.post("/clients/control-all", json={"mock_camera": True})
+            assert r.status_code == 200
+            assert sent["json"] == {"mock_camera": True}
+
+            r = client.post("/clients/control-all", json={})
+            assert r.status_code == 400
+
+
+def test_clients_control_all_rejects_unknown_backend():
+    with TestClient(build_control_app(_FakeServer())) as client:
+        r = client.post("/clients/control-all", json={"backend": "missing", "inference": True})
+    assert r.status_code == 400
+
+
 def test_switch_with_cascade_calls_each_client():
     """cascade=true forwards a /api/control POST to every registered client."""
     reg = ClientRegistry()

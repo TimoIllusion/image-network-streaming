@@ -3,6 +3,8 @@ const PENDING_TTL_MS = 5000;
 
 const backendSelect = document.getElementById("backend");
 const switchAllBtn = document.getElementById("switchAll");
+const mockAllBtn = document.getElementById("mockAll");
+const inferAllBtn = document.getElementById("inferAll");
 const clearAllBtn = document.getElementById("clearAll");
 const copyMdBtn = document.getElementById("copyMd");
 const downloadCsvBtn = document.getElementById("downloadCsv");
@@ -278,6 +280,36 @@ async function postClientClear(name) {
   refreshClients();
 }
 
+function markAllPending(action, value) {
+  for (const c of lastClientsPayload?.clients || []) {
+    pendingChanges[pendingKey(c.name, action)] = { value, expiresAt: Date.now() + PENDING_TTL_MS };
+  }
+}
+
+async function postAllClientControl(body, statusText) {
+  switchStatus.textContent = statusText;
+  try {
+    const r = await fetch("/clients/control-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      switchStatus.textContent = `failed: ${await r.text()}`;
+      return null;
+    }
+    const payload = await r.json();
+    const failed = Object.values(payload.results || {}).filter((status) => status !== "ok").length;
+    switchStatus.textContent = failed ? `applied with ${failed} failed` : "applied to all clients";
+    setTimeout(() => { switchStatus.textContent = ""; }, 3000);
+    refreshClients();
+    return payload;
+  } catch (e) {
+    switchStatus.textContent = `error: ${e}`;
+    return null;
+  }
+}
+
 clientsDiv.addEventListener("change", (ev) => {
   const el = ev.target;
   if (!(el instanceof HTMLInputElement)) return;
@@ -321,6 +353,33 @@ switchAllBtn.addEventListener("click", async () => {
   } finally {
     switchAllBtn.disabled = false;
     refreshTransports();
+  }
+});
+
+mockAllBtn.addEventListener("click", async () => {
+  mockAllBtn.disabled = true;
+  markAllPending("mock_camera", true);
+  renderClients(lastClientsPayload || { clients: [] });
+  try {
+    await postAllClientControl({ mock_camera: true }, "enabling mock cameras on all clients…");
+  } finally {
+    mockAllBtn.disabled = false;
+  }
+});
+
+inferAllBtn.addEventListener("click", async () => {
+  const backend = backendSelect.value || activeTransport;
+  if (!backend) {
+    switchStatus.textContent = "no active transport";
+    return;
+  }
+  inferAllBtn.disabled = true;
+  markAllPending("inference", true);
+  renderClients(lastClientsPayload || { clients: [] });
+  try {
+    await postAllClientControl({ backend, inference: true }, `starting inference on ${backend}…`);
+  } finally {
+    inferAllBtn.disabled = false;
   }
 });
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import socket
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -221,6 +222,42 @@ def build_control_app(server: Server, client_registry: ClientRegistry | None = N
         except requests.RequestException as e:
             raise HTTPException(status_code=502, detail=f"client {name} unreachable: {e}") from e
         return r.json()
+
+    @app.post("/clients/control-all")
+    def clients_control_all(body: ClientControlBody):
+        payload = {k: v for k, v in body.model_dump().items() if v is not None}
+        if not payload:
+            raise HTTPException(status_code=400, detail="control body is empty")
+        backend = payload.get("backend")
+        if backend is not None:
+            if backend not in registry.all_transports():
+                raise HTTPException(status_code=400, detail=f"unknown transport: {backend}")
+            if payload.get("inference") is True:
+                try:
+                    server.switch(backend)
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=str(e)) from e
+
+        records = client_registry.list_active()
+        results = {}
+
+        def post_control(record):
+            try:
+                r = requests.post(f"{record.ui_url}/api/control", json=payload, timeout=PROXY_TIMEOUT_S)
+                r.raise_for_status()
+                return record.name, "ok"
+            except requests.RequestException as e:
+                logger.warning(f"control-all: {record.name} ({record.ui_url}) failed: {e}")
+                return record.name, "failed"
+
+        if records:
+            with ThreadPoolExecutor(max_workers=len(records)) as executor:
+                futures = [executor.submit(post_control, record) for record in records]
+                for future in as_completed(futures):
+                    name, status = future.result()
+                    results[name] = status
+
+        return {"results": results}
 
     @app.post("/clients/{name}/clear")
     def client_clear(name: str):
