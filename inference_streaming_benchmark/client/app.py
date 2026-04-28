@@ -24,71 +24,13 @@ from .state import BenchmarkCollector, CameraHandle, TransportSession
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-camera = CameraHandle()
-session = TransportSession()
-collector = BenchmarkCollector()
-processor = FrameProcessor(camera, session, collector)
-
-
-def _build_heartbeat_stats() -> dict:
+def _build_heartbeat_stats(camera: CameraHandle, session: TransportSession, collector: BenchmarkCollector) -> dict:
     _client, active_transport, infer = session.snapshot()
     return {
         "inference": infer,
         "mock_camera": camera.mode == "mock",
         "mock_delay_ms": camera.mock_delay_ms(),
         **collector.snapshot_for_heartbeat(active_transport),
-    }
-
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    local_ip = get_local_ip(CONTROL_HOST)
-    ui_url = f"http://{local_ip}:{UI_PORT}"
-    registrar = Registrar(
-        name=CLIENT_NAME,
-        control_base=CONTROL_BASE,
-        ui_url=ui_url,
-        version="",
-        stats_provider=_build_heartbeat_stats,
-    )
-    processor.start()
-    registrar.start()
-    try:
-        yield
-    finally:
-        registrar.stop()
-        processor.stop()
-
-
-app = FastAPI(lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-
-@app.get("/")
-def index():
-    return FileResponse(STATIC_DIR / "index.html")
-
-
-@app.get("/api/status")
-def api_status():
-    """Fetch transport availability from the AI server's control plane."""
-    try:
-        items = control_client.fetch_transports()
-    except requests.RequestException:
-        return {name: False for name in registry.all_transports()}
-    return {item["name"]: True for item in items}
-
-
-@app.get("/api/state")
-def api_state():
-    """Current local state — used by the per-device UI to initialize toggles."""
-    _, active_transport, infer = session.snapshot()
-    return {
-        "name": CLIENT_NAME,
-        "backend": active_transport,
-        "inference": infer,
-        "mock_camera": camera.mode == "mock",
-        "mock_delay_ms": camera.mock_delay_ms(),
     }
 
 
@@ -99,7 +41,7 @@ class ControlBody(BaseModel):
     mock_delay_ms: float | None = None
 
 
-def _apply_backend(backend: str | None, inference: bool | None) -> None:
+def _apply_backend(session: TransportSession, backend: str | None, inference: bool | None) -> None:
     """Switch backend (and possibly inference) — raises HTTPException on failure."""
     if backend is None:
         return
@@ -115,7 +57,7 @@ def _apply_backend(backend: str | None, inference: bool | None) -> None:
         raise HTTPException(status_code=503, detail=f"control plane unreachable: {e}") from e
 
 
-def _apply_inference_only(inference: bool) -> None:
+def _apply_inference_only(session: TransportSession, inference: bool) -> None:
     """Toggle inference. If enabling without a known backend, fall back to whatever the server is running."""
     if not inference:
         session.set_infer(False)
@@ -136,41 +78,111 @@ def _apply_inference_only(inference: bool) -> None:
         raise HTTPException(status_code=503, detail=f"control plane unreachable: {e}") from e
 
 
-@app.post("/api/control")
-def api_control(body: ControlBody):
-    if body.mock_camera is not None:
-        camera.set_mode("mock" if body.mock_camera else "real")
-    if body.mock_delay_ms is not None:
-        camera.set_mock_delay_ms(body.mock_delay_ms)
+def build_client_app(
+    *,
+    camera: CameraHandle | None = None,
+    session: TransportSession | None = None,
+    collector: BenchmarkCollector | None = None,
+    processor: FrameProcessor | None = None,
+    registrar_factory=Registrar,
+) -> FastAPI:
+    camera = camera or CameraHandle()
+    session = session or TransportSession()
+    collector = collector or BenchmarkCollector()
+    processor = processor or FrameProcessor(camera, session, collector)
 
-    if body.backend is not None:
-        _apply_backend(body.backend, body.inference)
-    elif body.inference is not None:
-        _apply_inference_only(body.inference)
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        local_ip = get_local_ip(CONTROL_HOST)
+        ui_url = f"http://{local_ip}:{UI_PORT}"
+        registrar = registrar_factory(
+            name=CLIENT_NAME,
+            control_base=CONTROL_BASE,
+            ui_url=ui_url,
+            version="",
+            stats_provider=lambda: _build_heartbeat_stats(camera, session, collector),
+        )
+        processor.start()
+        registrar.start()
+        try:
+            yield
+        finally:
+            registrar.stop()
+            processor.stop()
 
-    return {
-        "ok": True,
-        "backend": session.active_transport,
-        "inference": session.infer,
-        "mock_camera": camera.mode == "mock",
-        "mock_delay_ms": camera.mock_delay_ms(),
-    }
+    app = FastAPI(lifespan=lifespan)
+    app.state.camera = camera
+    app.state.session = session
+    app.state.collector = collector
+    app.state.processor = processor
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    @app.get("/")
+    def index():
+        return FileResponse(STATIC_DIR / "index.html")
+
+    @app.get("/api/status")
+    def api_status():
+        """Fetch transport availability from the AI server's control plane."""
+        try:
+            items = control_client.fetch_transports()
+        except requests.RequestException:
+            return {name: False for name in registry.all_transports()}
+        return {item["name"]: True for item in items}
+
+    @app.get("/api/state")
+    def api_state():
+        """Current local state — used by the per-device UI to initialize toggles."""
+        _, active_transport, infer = session.snapshot()
+        return {
+            "name": CLIENT_NAME,
+            "backend": active_transport,
+            "inference": infer,
+            "mock_camera": camera.mode == "mock",
+            "mock_delay_ms": camera.mock_delay_ms(),
+        }
+
+    @app.post("/api/control")
+    def api_control(body: ControlBody):
+        if body.mock_camera is not None:
+            camera.set_mode("mock" if body.mock_camera else "real")
+        if body.mock_delay_ms is not None:
+            camera.set_mock_delay_ms(body.mock_delay_ms)
+
+        if body.backend is not None:
+            _apply_backend(session, body.backend, body.inference)
+        elif body.inference is not None:
+            _apply_inference_only(session, body.inference)
+
+        return {
+            "ok": True,
+            "backend": session.active_transport,
+            "inference": session.infer,
+            "mock_camera": camera.mode == "mock",
+            "mock_delay_ms": camera.mock_delay_ms(),
+        }
+
+    @app.post("/api/clear")
+    def api_clear():
+        collector.clear()
+        return {"ok": True}
+
+    @app.get("/api/stats")
+    def api_stats():
+        return collector.build_stats_rows()
+
+    @app.get("/video_feed")
+    def video_feed():
+        return StreamingResponse(
+            _mjpeg_frames(processor),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
+
+    return app
 
 
-@app.post("/api/clear")
-def api_clear():
-    collector.clear()
-    return {"ok": True}
-
-
-@app.get("/api/stats")
-def api_stats():
-    return collector.build_stats_rows()
-
-
-@app.get("/video_feed")
-def video_feed():
-    return StreamingResponse(
-        _mjpeg_frames(processor),
-        media_type="multipart/x-mixed-replace; boundary=frame",
-    )
+app = build_client_app()
+camera = app.state.camera
+session = app.state.session
+collector = app.state.collector
+processor = app.state.processor
