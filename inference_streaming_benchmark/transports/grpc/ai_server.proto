@@ -8,6 +8,8 @@ service AiDetectionService {
 
 message FrameRequest {
   bytes image = 1;
+  repeated int32 shape = 2;
+  string dtype = 3;
 }
 
 message DetectionResult {

@@ -7,10 +7,14 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class FrameRequest(_message.Message):
-    __slots__ = ("image",)
+    __slots__ = ("image", "shape", "dtype")
     IMAGE_FIELD_NUMBER: _ClassVar[int]
+    SHAPE_FIELD_NUMBER: _ClassVar[int]
+    DTYPE_FIELD_NUMBER: _ClassVar[int]
     image: bytes
-    def __init__(self, image: _Optional[bytes] = ...) -> None: ...
+    shape: _containers.RepeatedScalarFieldContainer[int]
+    dtype: str
+    def __init__(self, image: _Optional[bytes] = ..., shape: _Optional[_Iterable[int]] = ..., dtype: _Optional[str] = ...) -> None: ...
 
 class DetectionResult(_message.Message):
     __slots__ = ("boxes", "classes", "scores")

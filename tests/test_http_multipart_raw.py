@@ -22,6 +22,7 @@ def test_end_to_end_raw(monkeypatch):
         seen["client_name"] = request.client_name
         seen["request_id"] = request.request_id
         seen["transport"] = request.transport
+        seen["image_shape"] = request.image.shape
         return fake_detections, {"infer_ms": 1.0, "post_ms": 0.1}
 
     async def _run_sync(fn, *args, **kwargs):
@@ -37,7 +38,7 @@ def test_end_to_end_raw(monkeypatch):
     app = HTTPMultipartRawTransport.build_app(fake_handler)
     client = TestClient(app)
 
-    payload = np.zeros((4, 4, 3), dtype=np.uint8).tobytes()
+    payload = codec_mod.encode(np.zeros((4, 4, 3), dtype=np.uint8), raw=True)
     response = client.post(
         "/detect/",
         content=payload,
@@ -60,4 +61,5 @@ def test_end_to_end_raw(monkeypatch):
         "client_name": "client-http-raw",
         "request_id": "req-http-raw",
         "transport": "http_multipart_raw",
+        "image_shape": (4, 4, 3),
     }

@@ -37,7 +37,9 @@ class _Servicer(AiDetectionServiceServicer):
         meta = dict(context.invocation_metadata())
         t0 = time.perf_counter()
         # gRPC sends raw ndarray bytes — decode is a cheap reshape, not JPEG.
-        image = np.frombuffer(request.image, dtype=np.uint8).reshape(FRAME_SHAPE)
+        shape = tuple(request.shape) if request.shape else FRAME_SHAPE
+        dtype = np.dtype(request.dtype or "uint8")
+        image = np.frombuffer(request.image, dtype=dtype).reshape(shape)
         if image.shape[-1] == 4:
             image = image[..., :3]
         t1 = time.perf_counter()
@@ -129,7 +131,7 @@ class GRPCTransport(Transport):
             # 5s deadline matches the cascade window — without it a server teardown
             # mid-RPC could keep the call hanging until grpc's default keepalive trips.
             response, call = stub.Detect.with_call(
-                FrameRequest(image=frame_bytes),
+                FrameRequest(image=frame_bytes, shape=list(frame.shape), dtype=str(frame.dtype)),
                 timeout=CLIENT_RESPONSE_TIMEOUT_S,
                 metadata=(("x-infsb-client", client_name), ("x-infsb-request-id", request_id or "")),
             )

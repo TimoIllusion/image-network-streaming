@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n=inference_streaming_benchmark/transports/grpc/ai_server.proto\x12\x05\x61iapp\"\x1d\n\x0c\x46rameRequest\x12\r\n\x05image\x18\x01 \x01(\x0c\"U\n\x0f\x44\x65tectionResult\x12!\n\x05\x62oxes\x18\x01 \x03(\x0b\x32\x12.aiapp.BoundingBox\x12\x0f\n\x07\x63lasses\x18\x02 \x03(\t\x12\x0e\n\x06scores\x18\x03 \x03(\x02\"=\n\x0b\x42oundingBox\x12\n\n\x02x1\x18\x01 \x01(\x02\x12\n\n\x02y1\x18\x02 \x01(\x02\x12\n\n\x02x2\x18\x03 \x01(\x02\x12\n\n\x02y2\x18\x04 \x01(\x02\"H\n\x10\x44\x65tectionTimings\x12\x11\n\tdecode_ms\x18\x01 \x01(\x02\x12\x10\n\x08infer_ms\x18\x02 \x01(\x02\x12\x0f\n\x07post_ms\x18\x03 \x01(\x02\"f\n\x11\x44\x65tectionResponse\x12\'\n\x07results\x18\x01 \x03(\x0b\x32\x16.aiapp.DetectionResult\x12(\n\x07timings\x18\x02 \x01(\x0b\x32\x17.aiapp.DetectionTimings2M\n\x12\x41iDetectionService\x12\x37\n\x06\x44\x65tect\x12\x13.aiapp.FrameRequest\x1a\x18.aiapp.DetectionResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n=inference_streaming_benchmark/transports/grpc/ai_server.proto\x12\x05\x61iapp\";\n\x0c\x46rameRequest\x12\r\n\x05image\x18\x01 \x01(\x0c\x12\r\n\x05shape\x18\x02 \x03(\x05\x12\r\n\x05\x64type\x18\x03 \x01(\t\"U\n\x0f\x44\x65tectionResult\x12!\n\x05\x62oxes\x18\x01 \x03(\x0b\x32\x12.aiapp.BoundingBox\x12\x0f\n\x07\x63lasses\x18\x02 \x03(\t\x12\x0e\n\x06scores\x18\x03 \x03(\x02\"=\n\x0b\x42oundingBox\x12\n\n\x02x1\x18\x01 \x01(\x02\x12\n\n\x02y1\x18\x02 \x01(\x02\x12\n\n\x02x2\x18\x03 \x01(\x02\x12\n\n\x02y2\x18\x04 \x01(\x02\"H\n\x10\x44\x65tectionTimings\x12\x11\n\tdecode_ms\x18\x01 \x01(\x02\x12\x10\n\x08infer_ms\x18\x02 \x01(\x02\x12\x0f\n\x07post_ms\x18\x03 \x01(\x02\"f\n\x11\x44\x65tectionResponse\x12\'\n\x07results\x18\x01 \x03(\x0b\x32\x16.aiapp.DetectionResult\x12(\n\x07timings\x18\x02 \x01(\x0b\x32\x17.aiapp.DetectionTimings2M\n\x12\x41iDetectionService\x12\x37\n\x06\x44\x65tect\x12\x13.aiapp.FrameRequest\x1a\x18.aiapp.DetectionResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,15 +32,15 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'inference_streaming_benchma
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_FRAMEREQUEST']._serialized_start=72
-  _globals['_FRAMEREQUEST']._serialized_end=101
-  _globals['_DETECTIONRESULT']._serialized_start=103
-  _globals['_DETECTIONRESULT']._serialized_end=188
-  _globals['_BOUNDINGBOX']._serialized_start=190
-  _globals['_BOUNDINGBOX']._serialized_end=251
-  _globals['_DETECTIONTIMINGS']._serialized_start=253
-  _globals['_DETECTIONTIMINGS']._serialized_end=325
-  _globals['_DETECTIONRESPONSE']._serialized_start=327
-  _globals['_DETECTIONRESPONSE']._serialized_end=429
-  _globals['_AIDETECTIONSERVICE']._serialized_start=431
-  _globals['_AIDETECTIONSERVICE']._serialized_end=508
+  _globals['_FRAMEREQUEST']._serialized_end=131
+  _globals['_DETECTIONRESULT']._serialized_start=133
+  _globals['_DETECTIONRESULT']._serialized_end=218
+  _globals['_BOUNDINGBOX']._serialized_start=220
+  _globals['_BOUNDINGBOX']._serialized_end=281
+  _globals['_DETECTIONTIMINGS']._serialized_start=283
+  _globals['_DETECTIONTIMINGS']._serialized_end=355
+  _globals['_DETECTIONRESPONSE']._serialized_start=357
+  _globals['_DETECTIONRESPONSE']._serialized_end=459
+  _globals['_AIDETECTIONSERVICE']._serialized_start=461
+  _globals['_AIDETECTIONSERVICE']._serialized_end=538
 # @@protoc_insertion_point(module_scope)
