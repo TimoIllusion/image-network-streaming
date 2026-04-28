@@ -158,7 +158,7 @@ class MultiRunManager:
                 "finished_at": None,
                 "error": None,
                 "plan": [asdict(item) for item in plan],
-                "result": None,
+                "result": {"runs": []},
             }
             self._thread = threading.Thread(
                 target=self._run,
@@ -176,6 +176,7 @@ class MultiRunManager:
                 control_base=self._control_base,
                 duration_s=duration_s,
                 warmup_s=warmup_s,
+                on_run_complete=self._record_run,
             )
             with self._lock:
                 self._state["result"] = result
@@ -188,6 +189,14 @@ class MultiRunManager:
             with self._lock:
                 self._state["running"] = False
                 self._state["finished_at"] = time.time()
+
+    def _record_run(self, run: dict[str, Any]) -> None:
+        with self._lock:
+            result = self._state.setdefault("result", {"runs": []})
+            if result is None:
+                result = {"runs": []}
+                self._state["result"] = result
+            result.setdefault("runs", []).append(run)
 
     def status(self) -> dict:
         with self._lock:

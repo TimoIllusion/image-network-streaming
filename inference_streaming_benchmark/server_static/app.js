@@ -30,6 +30,7 @@ const multiRunDurationEl = document.getElementById("multiRunDuration");
 const multiRunStartBtn = document.getElementById("multiRunStart");
 const multiRunDownloadBtn = document.getElementById("multiRunDownload");
 const multiRunStatusEl = document.getElementById("multiRunStatus");
+const multiRunResultsEl = document.getElementById("multiRunResults");
 
 serverHost.textContent = window.location.host;
 
@@ -193,6 +194,68 @@ function buildMultiRunBody() {
   };
 }
 
+function formatSweepConfig(config) {
+  if (!config) return "unknown config";
+  if (!config.batching_enabled) return `${config.transport} · batch off`;
+  return `${config.transport} · batch on size ${config.max_batch_size} wait ${config.max_wait_ms}ms`;
+}
+
+function renderMultiRunResults(status) {
+  const runs = status?.result?.runs || [];
+  if (!runs.length) {
+    multiRunResultsEl.innerHTML = "";
+    return;
+  }
+  const body = runs.map((run) => {
+    const rows = collectBackendAggregates({
+      active_transport: run.active_transport,
+      clients: run.clients || [],
+    });
+    const metrics = rows.length
+      ? rows.map((r) => `
+          <tr>
+            <td>${escapeHtml(r.config)}</td>
+            <td>${escapeHtml(r.clients)}</td>
+            <td>${escapeHtml(r.frames)}</td>
+            <td>${r.fps.toFixed(1)}</td>
+            <td>${r.totalMs.toFixed(1)}</td>
+            <td>${r.waitMs.toFixed(1)}</td>
+            <td>${r.batch.toFixed(1)}</td>
+          </tr>
+        `).join("")
+      : `<tr><td colspan="7" class="muted">No frames recorded for this run.</td></tr>`;
+    return `
+      <div class="aggregate-row">
+        <div class="aggregate-row-head">
+          <span class="aggregate-backend">Run ${run.index}: ${escapeHtml(formatSweepConfig(run.config))}</span>
+          <span class="muted small">${(run.clients || []).length} clients</span>
+        </div>
+        <table class="bench-table">
+          <thead>
+            <tr>
+              <th>Config</th>
+              <th>Clients</th>
+              <th>Frames</th>
+              <th>FPS</th>
+              <th>total (ms)</th>
+              <th>wait (ms)</th>
+              <th>batch</th>
+            </tr>
+          </thead>
+          <tbody>${metrics}</tbody>
+        </table>
+      </div>`;
+  }).join("");
+  multiRunResultsEl.innerHTML = `
+    <div class="aggregate-panel">
+      <div class="aggregate-header">
+        <p class="aggregate-title">Sweep results</p>
+        <span class="muted small">Stable snapshots captured after each run.</span>
+      </div>
+      <div class="aggregate-grid">${body}</div>
+    </div>`;
+}
+
 function updateMultiRunStatus(status) {
   lastMultiRunStatus = status;
   const runCount = status?.result?.runs?.length || 0;
@@ -210,6 +273,7 @@ function updateMultiRunStatus(status) {
   }
   multiRunStartBtn.disabled = !!status?.running;
   multiRunDownloadBtn.disabled = runCount === 0;
+  renderMultiRunResults(status);
 }
 
 async function refreshMultiRunStatus() {

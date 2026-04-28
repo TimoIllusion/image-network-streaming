@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,7 @@ def run_sweep(
     warmup_s: float = 2.0,
     session: requests.Session | None = None,
     sleep=time.sleep,
+    on_run_complete: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     owns_session = session is None
     session = session or requests.Session()
@@ -95,16 +97,17 @@ def run_sweep(
             clients_response = session.get(f"{control_base}/clients", timeout=CONTROL_TIMEOUT_S)
             clients_response.raise_for_status()
             clients_payload = clients_response.json()
-            runs.append(
-                {
-                    "index": idx,
-                    "config": asdict(config),
-                    "batching": batching_response.json(),
-                    "control_results": control_response.json(),
-                    "clients": clients_payload.get("clients", []),
-                    "active_transport": clients_payload.get("active_transport"),
-                }
-            )
+            run = {
+                "index": idx,
+                "config": asdict(config),
+                "batching": batching_response.json(),
+                "control_results": control_response.json(),
+                "clients": clients_payload.get("clients", []),
+                "active_transport": clients_payload.get("active_transport"),
+            }
+            runs.append(run)
+            if on_run_complete is not None:
+                on_run_complete(run)
     finally:
         if owns_session:
             session.close()

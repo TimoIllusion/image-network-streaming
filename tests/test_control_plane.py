@@ -357,9 +357,11 @@ def test_switch_without_cascade_does_not_post_to_clients():
 def test_multi_run_start_and_status():
     calls = []
 
-    def _runner(plan, *, control_base, duration_s, warmup_s):
+    def _runner(plan, *, control_base, duration_s, warmup_s, on_run_complete):
         calls.append((plan, control_base, duration_s, warmup_s))
-        return {"runs": [{"index": 1, "config": {"transport": plan[0].transport}}]}
+        run = {"index": 1, "config": {"transport": plan[0].transport}}
+        on_run_complete(run)
+        return {"runs": [run]}
 
     manager = MultiRunManager(control_base="http://control", runner=_runner)
     with TestClient(build_control_app(_FakeServer(), multi_run_manager=manager)) as client:

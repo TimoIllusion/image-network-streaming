@@ -66,6 +66,7 @@ def test_build_plan_includes_batch_off_once_per_transport():
 def test_run_sweep_applies_config_clears_and_collects_clients():
     session = _Session()
     sleeps = []
+    completed = []
 
     result = run_sweep(
         [SweepConfig("grpc", True, 4, 10.0)],
@@ -74,6 +75,7 @@ def test_run_sweep_applies_config_clears_and_collects_clients():
         warmup_s=0.5,
         session=session,
         sleep=sleeps.append,
+        on_run_complete=completed.append,
     )
 
     assert sleeps == [0.5, 3.0]
@@ -90,3 +92,4 @@ def test_run_sweep_applies_config_clears_and_collects_clients():
         "max_wait_ms": 10.0,
     }
     assert result["runs"][0]["clients"][0]["name"] == "client-1"
+    assert completed == result["runs"]
