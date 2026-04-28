@@ -207,22 +207,9 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 
 - camera not working and throwing errors -> close all open instances of streamlit in browser except one and reload it
 
-## TODO
+## Work Tracking
 
-- [x] Dockerize ai server
-- [x] Rename "fastapi" backend to a more descriptive label (e.g. `pure-http-multipart`) that reflects the protocol rather than the framework
-- [x] Replace Streamlit frontend with Flask or a comparable lightweight framework for better control and lower overhead
-- [x] Improve benchmark statistics: add a dedicated "transmission time" column that excludes inference and preprocessing (encode + decode) so pure transport overhead is isolated
-- [x] Split `frontend.py` into a package (camera, mjpeg, state, app) — now `inference_streaming_benchmark/client/`
-- [x] Multi-device deployment + central operator panel
-- [x] Extract a shared `FastAPITransport` base for the duplicated uvicorn lifecycle in `http_multipart` and `websocket` (`transports/_fastapi_base.py`)
-- [x] Centralize raw payload codec and `FRAME_SHAPE` in one module (`transports/codec.py`)
-- [x] Drop the `*_Raw` subclass pattern in favor of codec injection at registration time
-- [ ] Consolidate transport `default_port` constants into the env-driven config module (still per-class today)
-- [ ] Improve dynamic batching with flexible batch sizes and waiting times
-- [x] Add a multi-run feature that sweeps multiple configs for benchmarking
-- [x] **Dynamic batching on the inference engine** — server-side batcher coalesces concurrent requests into a single `model([...])` call. Toggle + tune from the central UI; new `wait (ms)` + `batch` columns surface the effect in every stats table.
-- [x] Improve logging for batching and inference in general — Ultralytics per-frame console timing is silenced, duplicate HTTP timing logs are debug-only, and server logs now include request id, client, transport, direct/batch mode, queue wait split into backlog/batch-fill, batch size, inference, postprocess, and total server timing where available.
+Open work is tracked with beads. Run `bd ready` to see available issues.
 
 ## AI Assistance
 
