@@ -137,9 +137,7 @@ def main() -> None:
 
     with requests.Session() as session:
         transports = (
-            parse_csv_strings(args.transports)
-            if args.transports
-            else fetch_transport_names(session, args.control_base)
+            parse_csv_strings(args.transports) if args.transports else fetch_transport_names(session, args.control_base)
         )
         plan = build_plan(
             transports=transports,
