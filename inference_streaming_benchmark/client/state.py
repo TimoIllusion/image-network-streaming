@@ -162,13 +162,21 @@ class BenchmarkCollector:
         enabled = bool(timings.get("batching_enabled", False))
         max_batch_size = int(timings.get("batching_max_batch_size", 1))
         max_wait_ms = float(timings.get("batching_max_wait_ms", 0.0))
-        return (transport_name, enabled, max_batch_size, max_wait_ms)
+        inference_mode = str(timings.get("inference_mode", "unknown"))
+        inference_instances = int(timings.get("inference_instances", 1))
+        return (transport_name, enabled, max_batch_size, max_wait_ms, inference_mode, inference_instances)
 
     def _bucket_label(self, key: tuple) -> str:
-        transport_name, enabled, max_batch_size, max_wait_ms = key
+        transport_name, enabled, max_batch_size, max_wait_ms, inference_mode, inference_instances = key
         if not enabled:
-            return f"{transport_name} · batch off"
-        return f"{transport_name} · batch on size {max_batch_size} wait {max_wait_ms:g}ms"
+            batch_label = "batch off"
+        else:
+            batch_label = f"batch on size {max_batch_size} wait {max_wait_ms:g}ms"
+        if inference_mode == "multi-instance":
+            infer_label = f"infer {inference_mode} x{inference_instances}"
+        else:
+            infer_label = f"infer {inference_mode}"
+        return f"{transport_name} · {batch_label} · {infer_label}"
 
     def record(self, transport_name: str, timings: dict) -> None:
         with self._lock:
@@ -194,6 +202,8 @@ class BenchmarkCollector:
                     "batching_enabled": bool(key[1]),
                     "batching_max_batch_size": int(key[2]),
                     "batching_max_wait_ms": float(key[3]),
+                    "inference_mode": key[4],
+                    "inference_instances": int(key[5]),
                     "active_time_s": 0.0,
                     **{col: [] for col in TIMING_COLUMNS + NUMERIC_COLUMNS},
                 },

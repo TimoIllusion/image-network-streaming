@@ -73,3 +73,40 @@ def test_infer_serializes_model_calls(monkeypatch):
 
     assert model.calls == 4
     assert model.max_active_calls == 1
+
+
+def test_unsafe_multi_allows_concurrent_shared_model_calls(monkeypatch):
+    engine = InferenceEngine(mode="unsafe-multi")
+    model = _BlockingModel()
+    monkeypatch.setattr(engine, "_get_or_load_model", lambda: model)
+
+    threads = [threading.Thread(target=lambda: engine.infer("image")) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=1.0)
+
+    assert model.calls == 4
+    assert model.max_active_calls > 1
+
+
+def test_multi_instance_caps_concurrency_to_instance_count(monkeypatch):
+    engine = InferenceEngine(mode="multi-instance", instances=2)
+    models = []
+
+    def load_model():
+        model = _BlockingModel()
+        models.append(model)
+        return model
+
+    monkeypatch.setattr(engine, "_load_model", load_model)
+
+    threads = [threading.Thread(target=lambda: engine.infer("image")) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=1.0)
+
+    assert len(models) == 2
+    assert sum(model.calls for model in models) == 4
+    assert max(model.max_active_calls for model in models) == 1

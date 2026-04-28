@@ -27,6 +27,8 @@ class _Session:
                     "max_wait_ms": json["max_wait_ms"],
                 }
             )
+        if url.endswith("/inference"):
+            return _Response({"mode": json["mode"], "instances": json["instances"]})
         if url.endswith("/clients/control-all"):
             return _Response({"results": {"client-1": "ok"}})
         if url.endswith("/clients/clear-all"):
@@ -63,6 +65,23 @@ def test_build_plan_includes_batch_off_once_per_transport():
     assert len(plan) == 10
 
 
+def test_build_plan_crosses_inference_modes_and_instances():
+    plan = build_plan(
+        ["grpc"],
+        ["off"],
+        [2],
+        [5.0],
+        inference_modes=["single", "multi-instance"],
+        inference_instances=[1, 2],
+    )
+
+    assert plan == [
+        SweepConfig("grpc", False, 1, 0.0, "single", 1),
+        SweepConfig("grpc", False, 1, 0.0, "multi-instance", 1),
+        SweepConfig("grpc", False, 1, 0.0, "multi-instance", 2),
+    ]
+
+
 def test_run_sweep_applies_config_clears_and_collects_clients():
     session = _Session()
     sleeps = []
@@ -79,17 +98,21 @@ def test_run_sweep_applies_config_clears_and_collects_clients():
     )
 
     assert sleeps == [0.5, 3.0]
-    assert session.posts[0][0] == "http://control/batching"
-    assert session.posts[0][1] == {"enabled": True, "max_batch_size": 4, "max_wait_ms": 10.0}
-    assert session.posts[1][0] == "http://control/clients/control-all"
-    assert session.posts[1][1] == {"backend": "grpc", "inference": True}
-    assert session.posts[2][0] == "http://control/clients/clear-all"
+    assert session.posts[0][0] == "http://control/inference"
+    assert session.posts[0][1] == {"mode": "single", "instances": 1}
+    assert session.posts[1][0] == "http://control/batching"
+    assert session.posts[1][1] == {"enabled": True, "max_batch_size": 4, "max_wait_ms": 10.0}
+    assert session.posts[2][0] == "http://control/clients/control-all"
+    assert session.posts[2][1] == {"backend": "grpc", "inference": True}
+    assert session.posts[3][0] == "http://control/clients/clear-all"
     assert session.gets[0][0] == "http://control/clients"
     assert result["runs"][0]["config"] == {
         "transport": "grpc",
         "batching_enabled": True,
         "max_batch_size": 4,
         "max_wait_ms": 10.0,
+        "inference_mode": "single",
+        "inference_instances": 1,
     }
     assert result["runs"][0]["clients"][0]["name"] == "client-1"
     assert completed == result["runs"]

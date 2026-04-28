@@ -19,6 +19,8 @@ class SweepConfig:
     batching_enabled: bool
     max_batch_size: int
     max_wait_ms: float
+    inference_mode: str = "single"
+    inference_instances: int = 1
 
 
 def parse_csv_strings(value: str) -> list[str]:
@@ -38,15 +40,24 @@ def build_plan(
     batch_modes: list[str],
     batch_sizes: list[int],
     batch_waits_ms: list[float],
+    inference_modes: list[str] | None = None,
+    inference_instances: list[int] | None = None,
 ) -> list[SweepConfig]:
     plan: list[SweepConfig] = []
-    for transport in transports:
-        if "off" in batch_modes:
-            plan.append(SweepConfig(transport, False, 1, 0.0))
-        if "on" in batch_modes:
-            for size in batch_sizes:
-                for wait_ms in batch_waits_ms:
-                    plan.append(SweepConfig(transport, True, size, wait_ms))
+    inference_modes = inference_modes or ["single"]
+    inference_instances = inference_instances or [1]
+    for inference_mode in inference_modes:
+        mode_instances = inference_instances if inference_mode == "multi-instance" else [1]
+        for instance_count in mode_instances:
+            for transport in transports:
+                if "off" in batch_modes:
+                    plan.append(SweepConfig(transport, False, 1, 0.0, inference_mode, instance_count))
+                if "on" in batch_modes:
+                    for size in batch_sizes:
+                        for wait_ms in batch_waits_ms:
+                            plan.append(
+                                SweepConfig(transport, True, size, wait_ms, inference_mode, instance_count)
+                            )
     return plan
 
 
@@ -71,6 +82,16 @@ def run_sweep(
     runs = []
     try:
         for idx, config in enumerate(plan, start=1):
+            inference_response = session.post(
+                f"{control_base}/inference",
+                json={
+                    "mode": config.inference_mode,
+                    "instances": config.inference_instances,
+                },
+                timeout=CONTROL_TIMEOUT_S,
+            )
+            inference_response.raise_for_status()
+
             batching_response = session.post(
                 f"{control_base}/batching",
                 json={
@@ -100,6 +121,7 @@ def run_sweep(
             run = {
                 "index": idx,
                 "config": asdict(config),
+                "inference": inference_response.json(),
                 "batching": batching_response.json(),
                 "control_results": control_response.json(),
                 "clients": clients_payload.get("clients", []),
@@ -125,6 +147,12 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--batch-sizes", default="1,2,4,8", help="comma-separated max batch sizes for batch=on")
     parser.add_argument("--batch-waits-ms", default="0,5,10,20", help="comma-separated max wait values for batch=on")
+    parser.add_argument(
+        "--inference-modes",
+        default="single",
+        help="comma-separated inference modes: single,unsafe-multi,multi-instance",
+    )
+    parser.add_argument("--inference-instances", default="1", help="comma-separated instance counts")
     parser.add_argument("--duration-s", type=float, default=10.0, help="measurement duration per run")
     parser.add_argument("--warmup-s", type=float, default=2.0, help="warmup duration before clearing stats")
     parser.add_argument("--output", default="benchmark-runs.json", help="JSON output path")
@@ -147,6 +175,8 @@ def main() -> None:
             batch_modes=batch_modes,
             batch_sizes=parse_csv_ints(args.batch_sizes),
             batch_waits_ms=parse_csv_floats(args.batch_waits_ms),
+            inference_modes=parse_csv_strings(args.inference_modes),
+            inference_instances=parse_csv_ints(args.inference_instances),
         )
         result = run_sweep(
             plan,

@@ -294,6 +294,22 @@
           <button id="batchApply">Apply</button>
           <span class="hint" id="batchStatus"></span>
         </div>
+        <div class="controls" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border);">
+          <div class="control-group">
+            <label for="inferMode" class="small muted">inference mode</label>
+            <select id="inferMode">
+              <option value="single">single</option>
+              <option value="unsafe-multi">unsafe-multi</option>
+              <option value="multi-instance">multi-instance</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="inferInstances" class="small muted">instances</label>
+            <input id="inferInstances" type="number" min="1" step="1" value="1" style="width: 4.5rem;" />
+          </div>
+          <button id="inferApply">Apply</button>
+          <span class="hint" id="inferStatus"></span>
+        </div>
       </div>
 
       <div class="card">
@@ -317,6 +333,18 @@
           <div class="multi-run-field">
             <label for="multiRunBatchWaits" class="small muted">batch waits (ms)</label>
             <input id="multiRunBatchWaits" type="text" value="0,5,10,20" />
+          </div>
+          <div class="multi-run-field">
+            <label class="small muted">inference modes</label>
+            <div class="option-list">
+              <label class="control-pill"><input type="checkbox" id="multiRunInferSingle" checked /> single</label>
+              <label class="control-pill"><input type="checkbox" id="multiRunInferUnsafe" /> unsafe-multi</label>
+              <label class="control-pill"><input type="checkbox" id="multiRunInferInstancesMode" /> multi-instance</label>
+            </div>
+          </div>
+          <div class="multi-run-field">
+            <label for="multiRunInferInstances" class="small muted">inference instances</label>
+            <input id="multiRunInferInstances" type="text" value="1,2" />
           </div>
           <div class="multi-run-field">
             <label for="multiRunWarmup" class="small muted">warmup (s)</label>
@@ -352,6 +380,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js?v=12"></script>
+    <script src="/static/app.js?v=13"></script>
   </body>
 </html>

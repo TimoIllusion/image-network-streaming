@@ -73,7 +73,7 @@ def test_build_stats_rows_computes_median_fps_and_frame_count():
     rows = {r["Backend"]: r for r in collector.build_stats_rows()}
 
     http_row = rows["http_multipart"]
-    assert http_row["Batch config"] == "http_multipart · batch off"
+    assert http_row["Batch config"] == "http_multipart · batch off · infer unknown"
     assert http_row["Frames"] == 3
     # Median of [10, 20, 30] = 20
     assert http_row["total (ms)"] == "20.0"
@@ -118,8 +118,8 @@ def test_same_backend_splits_rows_by_batch_config():
     rows = sorted(collector.build_stats_rows(), key=lambda r: r["Batch config"])
 
     assert [r["Batch config"] for r in rows] == [
-        "http_multipart · batch off",
-        "http_multipart · batch on size 3 wait 25ms",
+        "http_multipart · batch off · infer unknown",
+        "http_multipart · batch on size 3 wait 25ms · infer unknown",
     ]
     assert [r["Frames"] for r in rows] == [1, 1]
 
@@ -129,7 +129,7 @@ def test_build_stats_rows_skips_backends_with_no_samples():
     collector = BenchmarkCollector()
     # setdefault creates the empty buckets without appending anything
     collector.bench_results.setdefault(
-        ("websocket", False, 1, 0.0),
+        ("websocket", False, 1, 0.0, "unknown", 1),
         {
             "transport_name": "websocket",
             "bucket_label": "websocket · batch off",

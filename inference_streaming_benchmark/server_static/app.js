@@ -20,11 +20,19 @@ const batchSizeEl = document.getElementById("batchSize");
 const batchWaitEl = document.getElementById("batchWait");
 const batchApplyBtn = document.getElementById("batchApply");
 const batchStatus = document.getElementById("batchStatus");
+const inferModeEl = document.getElementById("inferMode");
+const inferInstancesEl = document.getElementById("inferInstances");
+const inferApplyBtn = document.getElementById("inferApply");
+const inferStatus = document.getElementById("inferStatus");
 const multiRunTransportsEl = document.getElementById("multiRunTransports");
 const multiRunBatchOffEl = document.getElementById("multiRunBatchOff");
 const multiRunBatchOnEl = document.getElementById("multiRunBatchOn");
 const multiRunBatchSizesEl = document.getElementById("multiRunBatchSizes");
 const multiRunBatchWaitsEl = document.getElementById("multiRunBatchWaits");
+const multiRunInferSingleEl = document.getElementById("multiRunInferSingle");
+const multiRunInferUnsafeEl = document.getElementById("multiRunInferUnsafe");
+const multiRunInferInstancesModeEl = document.getElementById("multiRunInferInstancesMode");
+const multiRunInferInstancesEl = document.getElementById("multiRunInferInstances");
 const multiRunWarmupEl = document.getElementById("multiRunWarmup");
 const multiRunDurationEl = document.getElementById("multiRunDuration");
 const multiRunStartBtn = document.getElementById("multiRunStart");
@@ -102,6 +110,7 @@ function clampMockDelay(value) {
 
 // Track which fields the user has touched, so periodic refresh doesn't clobber in-progress edits.
 const batchFieldDirty = { enabled: false, max_batch_size: false, max_wait_ms: false };
+const inferFieldDirty = { mode: false, instances: false };
 
 function markDirty(field) {
   batchFieldDirty[field] = true;
@@ -161,6 +170,52 @@ batchSizeEl.addEventListener("input", () => markDirty("max_batch_size"));
 batchWaitEl.addEventListener("input", () => markDirty("max_wait_ms"));
 batchApplyBtn.addEventListener("click", applyBatching);
 
+async function refreshInference() {
+  try {
+    const r = await fetch("/inference");
+    const s = await r.json();
+    if (!inferFieldDirty.mode) inferModeEl.value = s.mode;
+    if (!inferFieldDirty.instances && document.activeElement !== inferInstancesEl) {
+      inferInstancesEl.value = s.instances;
+    }
+  } catch {
+    /* transient */
+  }
+}
+
+async function applyInference() {
+  const body = {
+    mode: inferModeEl.value,
+    instances: parseInt(inferInstancesEl.value, 10),
+  };
+  inferApplyBtn.disabled = true;
+  inferStatus.textContent = "applying…";
+  try {
+    const r = await fetch("/inference", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      inferStatus.textContent = `failed: ${await r.text()}`;
+    } else {
+      const s = await r.json();
+      inferModeEl.value = s.mode;
+      inferInstancesEl.value = s.instances;
+      inferFieldDirty.mode = false;
+      inferFieldDirty.instances = false;
+      inferStatus.textContent = `applied (${s.mode}, instances ${s.instances})`;
+      setTimeout(() => { inferStatus.textContent = ""; }, 3000);
+    }
+  } finally {
+    inferApplyBtn.disabled = false;
+  }
+}
+
+inferModeEl.addEventListener("change", () => { inferFieldDirty.mode = true; });
+inferInstancesEl.addEventListener("input", () => { inferFieldDirty.instances = true; });
+inferApplyBtn.addEventListener("click", applyInference);
+
 function parseNumberList(value, parser) {
   return String(value)
     .split(",")
@@ -186,11 +241,17 @@ function buildMultiRunBody() {
   const batchModes = [];
   if (multiRunBatchOffEl.checked) batchModes.push("off");
   if (multiRunBatchOnEl.checked) batchModes.push("on");
+  const inferenceModes = [];
+  if (multiRunInferSingleEl.checked) inferenceModes.push("single");
+  if (multiRunInferUnsafeEl.checked) inferenceModes.push("unsafe-multi");
+  if (multiRunInferInstancesModeEl.checked) inferenceModes.push("multi-instance");
   return {
     transports: selectedMultiRunTransports(),
     batch_modes: batchModes,
     batch_sizes: parseNumberList(multiRunBatchSizesEl.value, (item) => Number.parseInt(item, 10)),
     batch_waits_ms: parseNumberList(multiRunBatchWaitsEl.value, Number.parseFloat),
+    inference_modes: inferenceModes,
+    inference_instances: parseNumberList(multiRunInferInstancesEl.value, (item) => Number.parseInt(item, 10)),
     warmup_s: Number.parseFloat(multiRunWarmupEl.value),
     duration_s: Number.parseFloat(multiRunDurationEl.value),
   };
@@ -241,6 +302,8 @@ function renderMultiRunResults(status) {
         batching: run.config?.batching_enabled ? "on" : "off",
         maxBatchSize: run.config?.max_batch_size ?? null,
         maxWaitMs: run.config?.max_wait_ms ?? null,
+        inferenceMode: run.config?.inference_mode || "single",
+        inferenceInstances: run.config?.inference_instances ?? 1,
         clients: (run.clients || []).length,
         frames: 0,
         throughput: null,
@@ -258,6 +321,8 @@ function renderMultiRunResults(status) {
         batching: run.config?.batching_enabled ? "on" : "off",
         maxBatchSize: run.config?.max_batch_size ?? null,
         maxWaitMs: run.config?.max_wait_ms ?? null,
+        inferenceMode: run.config?.inference_mode || "single",
+        inferenceInstances: run.config?.inference_instances ?? 1,
         clients: r.clients,
         frames: r.frames,
         throughput: r.fps,
@@ -275,6 +340,8 @@ function renderMultiRunResults(status) {
       <td>${escapeHtml(r.batching)}</td>
       <td>${escapeHtml(r.maxBatchSize ?? "-")}</td>
       <td>${escapeHtml(r.maxWaitMs ?? "-")}</td>
+      <td>${escapeHtml(r.inferenceMode)}</td>
+      <td>${escapeHtml(r.inferenceInstances)}</td>
       <td>${escapeHtml(r.clients)}</td>
       <td>${escapeHtml(r.frames)}</td>
       <td>${escapeHtml(formatSweepMetric(r.throughput))}</td>
@@ -298,6 +365,8 @@ function renderMultiRunResults(status) {
             ${sweepHeader("batching", "Batching")}
             ${sweepHeader("maxBatchSize", "Max size")}
             ${sweepHeader("maxWaitMs", "Max wait")}
+            ${sweepHeader("inferenceMode", "Infer mode")}
+            ${sweepHeader("inferenceInstances", "Instances")}
             ${sweepHeader("clients", "Clients")}
             ${sweepHeader("frames", "Frames")}
             ${sweepHeader("throughput", "Throughput")}
@@ -864,8 +933,10 @@ downloadCsvBtn.addEventListener("click", () => {
 refreshTransports();
 refreshClients();
 refreshBatching();
+refreshInference();
 refreshMultiRunStatus();
 setInterval(refreshTransports, POLL_MS * 3);
 setInterval(refreshClients, POLL_MS);
 setInterval(refreshBatching, POLL_MS * 3);
+setInterval(refreshInference, POLL_MS * 3);
 setInterval(refreshMultiRunStatus, POLL_MS);

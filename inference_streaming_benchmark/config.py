@@ -16,3 +16,7 @@ MOCK_DELAY_MAX_MS = 5000.0
 BATCH_ENABLED = os.getenv("INFSB_BATCH_ENABLED", "0") == "1"
 BATCH_SIZE = int(os.getenv("INFSB_BATCH_SIZE", "8"))
 BATCH_WAIT_MS = float(os.getenv("INFSB_BATCH_WAIT_MS", "10"))
+
+# Inference concurrency mode (server-side). Runtime-tunable via the central UI.
+INFER_MODE = os.getenv("INFSB_INFER_MODE", "single")
+INFER_INSTANCES = int(os.getenv("INFSB_INFER_INSTANCES", "2"))

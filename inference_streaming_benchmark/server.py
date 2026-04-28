@@ -19,8 +19,15 @@ from pydantic import BaseModel, Field
 
 from inference_streaming_benchmark.batcher import Batcher
 from inference_streaming_benchmark.client_registry import ClientRegistry
-from inference_streaming_benchmark.config import BATCH_ENABLED, BATCH_SIZE, BATCH_WAIT_MS, CONTROL_PORT
-from inference_streaming_benchmark.engine import InferenceEngine
+from inference_streaming_benchmark.config import (
+    BATCH_ENABLED,
+    BATCH_SIZE,
+    BATCH_WAIT_MS,
+    CONTROL_PORT,
+    INFER_INSTANCES,
+    INFER_MODE,
+)
+from inference_streaming_benchmark.engine import INFER_MODES, InferenceEngine
 from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.multi_run import SweepConfig, build_plan, run_sweep
 from inference_streaming_benchmark.transports import registry
@@ -47,7 +54,7 @@ class Server:
     """Hosts one active transport at a time; hot-swaps on request."""
 
     def __init__(self):
-        self.engine = InferenceEngine()
+        self.engine = InferenceEngine(mode=INFER_MODE, instances=INFER_INSTANCES)
         self.batcher = Batcher(
             self.engine,
             enabled=BATCH_ENABLED,
@@ -120,11 +127,18 @@ class BatchingBody(BaseModel):
     max_wait_ms: float | None = None
 
 
+class InferenceBody(BaseModel):
+    mode: str | None = None
+    instances: int | None = None
+
+
 class MultiRunBody(BaseModel):
     transports: list[str]
     batch_modes: list[str] = Field(default_factory=lambda: ["off", "on"])
     batch_sizes: list[int] = Field(default_factory=lambda: [1, 2, 4, 8])
     batch_waits_ms: list[float] = Field(default_factory=lambda: [0.0, 5.0, 10.0, 20.0])
+    inference_modes: list[str] = Field(default_factory=lambda: ["single"])
+    inference_instances: list[int] = Field(default_factory=lambda: [1])
     duration_s: float = 10.0
     warmup_s: float = 2.0
 
@@ -387,6 +401,17 @@ def build_control_app(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+    @app.get("/inference")
+    def inference_state():
+        return server.engine.state()
+
+    @app.post("/inference")
+    def inference_set(body: InferenceBody):
+        try:
+            return server.engine.configure(mode=body.mode, instances=body.instances)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     @app.post("/multi-run/start")
     def multi_run_start(body: MultiRunBody):
         unknown_transports = sorted(set(body.transports) - set(registry.all_transports()))
@@ -403,12 +428,24 @@ def build_control_app(
             raise HTTPException(status_code=400, detail="batch sizes must be >= 1")
         if any(wait_ms < 0 for wait_ms in body.batch_waits_ms):
             raise HTTPException(status_code=400, detail="batch waits must be >= 0")
+        bad_infer_modes = sorted(set(body.inference_modes) - set(INFER_MODES))
+        if bad_infer_modes:
+            raise HTTPException(status_code=400, detail=f"unknown inference mode(s): {', '.join(bad_infer_modes)}")
+        if any(instances < 1 for instances in body.inference_instances):
+            raise HTTPException(status_code=400, detail="inference instances must be >= 1")
         if body.duration_s <= 0:
             raise HTTPException(status_code=400, detail="duration_s must be > 0")
         if body.warmup_s < 0:
             raise HTTPException(status_code=400, detail="warmup_s must be >= 0")
 
-        plan = build_plan(body.transports, body.batch_modes, body.batch_sizes, body.batch_waits_ms)
+        plan = build_plan(
+            body.transports,
+            body.batch_modes,
+            body.batch_sizes,
+            body.batch_waits_ms,
+            inference_modes=body.inference_modes,
+            inference_instances=body.inference_instances,
+        )
         if not plan:
             raise HTTPException(status_code=400, detail="multi-run plan is empty")
         try:

@@ -113,6 +113,16 @@ The `transport (ms)` column is `total − infer − post − wait`, so it stays 
 
 **Caveat for ZMQ/ImageZMQ:** these transports submit one frame at a time (REQ/REP semantics), so the batcher never coalesces — it just adds the `max_wait_ms` timeout penalty. The `batch` column staying at `1` and `wait (ms)` matching `max_wait_ms` makes this visible. Leave batching off for those transports unless you're explicitly studying the trade-off.
 
+### Inference concurrency modes
+
+The server can run YOLO inference in three modes, configurable from the central UI or `POST /inference {mode, instances}`:
+
+- **`single`** — one shared YOLO instance with serialized model calls. This is the default and most reproducible mode.
+- **`unsafe-multi`** — one shared YOLO instance with concurrent model calls. This restores the old faster-but-undocumented behavior.
+- **`multi-instance`** — multiple YOLO instances, with at most one in-flight call per instance. This isolates model calls but uses more memory and startup time.
+
+Inference mode and instance count are included in benchmark grouping and sweep results.
+
 ### Multi-run benchmark sweeps
 
 With the server and one or more clients already running, sweep transports and batching configs from the control plane:
@@ -140,6 +150,8 @@ Each run applies the batching config, switches all active clients to the selecte
 | `INFSB_BATCH_ENABLED` | `0`                  | `1` → start the server with dynamic batching on |
 | `INFSB_BATCH_SIZE`    | `8`                  | Max frames per batched model call            |
 | `INFSB_BATCH_WAIT_MS` | `10`                 | Max time the batcher waits to fill a batch  |
+| `INFSB_INFER_MODE`    | `single`             | Inference mode: `single`, `unsafe-multi`, or `multi-instance` |
+| `INFSB_INFER_INSTANCES` | `2`                | YOLO instance count used by `multi-instance` mode |
 
 ### Adding a new transport
 

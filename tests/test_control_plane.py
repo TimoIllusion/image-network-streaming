@@ -37,6 +37,25 @@ class _FakeBatcher:
         return dict(self._state)
 
 
+class _FakeEngine:
+    def __init__(self):
+        self._state = {"mode": "single", "instances": 1}
+
+    def state(self):
+        return dict(self._state)
+
+    def configure(self, *, mode=None, instances=None):
+        if mode is not None:
+            if mode not in {"single", "unsafe-multi", "multi-instance"}:
+                raise ValueError("bad mode")
+            self._state["mode"] = mode
+        if instances is not None:
+            if instances < 1:
+                raise ValueError("instances must be >= 1")
+            self._state["instances"] = int(instances)
+        return dict(self._state)
+
+
 class _FakeServer:
     """Stands in for Server — no sockets, no threads, just records interactions."""
 
@@ -46,6 +65,7 @@ class _FakeServer:
         self.stop_called = False
         self.fail_on: str | None = None
         self.batcher = _FakeBatcher()
+        self.engine = _FakeEngine()
 
     def switch(self, name: str):
         self.switch_calls.append(name)
@@ -458,6 +478,28 @@ def test_batching_post_rejects_invalid_values():
         r = client.post("/batching", json={"max_batch_size": 0})
     assert r.status_code == 400
     assert "max_batch_size" in r.json()["detail"]
+
+
+def test_inference_get_and_post():
+    server = _FakeServer()
+    with TestClient(build_control_app(server)) as client:
+        r = client.get("/inference")
+        assert r.status_code == 200
+        assert r.json() == {"mode": "single", "instances": 1}
+
+        r = client.post("/inference", json={"mode": "multi-instance", "instances": 3})
+        assert r.status_code == 200
+        assert r.json() == {"mode": "multi-instance", "instances": 3}
+
+
+def test_inference_post_rejects_invalid_values():
+    server = _FakeServer()
+    with TestClient(build_control_app(server)) as client:
+        r = client.post("/inference", json={"mode": "bad"})
+        assert r.status_code == 400
+
+        r = client.post("/inference", json={"instances": 0})
+        assert r.status_code == 400
 
 
 def test_clear_all_proxies_to_each_client_and_summarizes():

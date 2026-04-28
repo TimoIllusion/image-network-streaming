@@ -78,6 +78,8 @@ class _Servicer(AiDetectionServiceServicer):
                 ("x-infsb-batching-enabled", "1" if infer_timings.get("batching_enabled", False) else "0"),
                 ("x-infsb-batching-max-batch-size", str(infer_timings.get("batching_max_batch_size", 1))),
                 ("x-infsb-batching-max-wait-ms", str(infer_timings.get("batching_max_wait_ms", 0.0))),
+                ("x-infsb-inference-mode", str(infer_timings.get("inference_mode", "unknown"))),
+                ("x-infsb-inference-instances", str(infer_timings.get("inference_instances", 1))),
             )
         )
         return DetectionResponse(results=results_proto, timings=timings)
@@ -147,6 +149,8 @@ class GRPCTransport(Transport):
             timings["batching_enabled"] = trailing.get("x-infsb-batching-enabled", "0") == "1"
             timings["batching_max_batch_size"] = float(trailing.get("x-infsb-batching-max-batch-size", 1))
             timings["batching_max_wait_ms"] = float(trailing.get("x-infsb-batching-max-wait-ms", 0.0))
+            timings["inference_mode"] = trailing.get("x-infsb-inference-mode", "unknown")
+            timings["inference_instances"] = float(trailing.get("x-infsb-inference-instances", 1))
 
             if not response.results:
                 return None, timings
