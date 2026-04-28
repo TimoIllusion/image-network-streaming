@@ -8,7 +8,7 @@ import numpy as np
 
 from inference_streaming_benchmark.logging import logger
 
-from ..base import Handler, InferenceRequest, Transport
+from ..base import CLIENT_RESPONSE_TIMEOUT_S, Handler, InferenceRequest, Transport
 from ..codec import FRAME_SHAPE
 from .ai_server_pb2 import (
     BoundingBox,
@@ -130,7 +130,7 @@ class GRPCTransport(Transport):
             # mid-RPC could keep the call hanging until grpc's default keepalive trips.
             response, call = stub.Detect.with_call(
                 FrameRequest(image=frame_bytes),
-                timeout=5.0,
+                timeout=CLIENT_RESPONSE_TIMEOUT_S,
                 metadata=(("x-infsb-client", client_name), ("x-infsb-request-id", request_id or "")),
             )
             timings["total_ms"] = (time.perf_counter() - t_total) * 1000

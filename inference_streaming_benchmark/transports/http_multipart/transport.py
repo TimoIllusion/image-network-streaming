@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from inference_streaming_benchmark.logging import logger
 
 from .._fastapi_base import FastAPITransport
-from ..base import Handler, InferenceRequest
+from ..base import CLIENT_RESPONSE_TIMEOUT_S, Handler, InferenceRequest
 from ..codec import decode, encode
 from ..envelope import build, unpack
 
@@ -114,7 +114,7 @@ class HTTPMultipartTransport(FastAPITransport):
                         "X-INFSB-Client": client_name,
                         "X-INFSB-Request-ID": request_id or "",
                     },
-                    timeout=(2, 30),
+                    timeout=(2, CLIENT_RESPONSE_TIMEOUT_S),
                 )
             else:
                 files = {"file": ("frame.jpg", io.BytesIO(payload), "image/jpeg")}
@@ -122,7 +122,7 @@ class HTTPMultipartTransport(FastAPITransport):
                     url,
                     files=files,
                     headers={"X-INFSB-Client": client_name, "X-INFSB-Request-ID": request_id or ""},
-                    timeout=(2, 30),
+                    timeout=(2, CLIENT_RESPONSE_TIMEOUT_S),
                 )
             timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 

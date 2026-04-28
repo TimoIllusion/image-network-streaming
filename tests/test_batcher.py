@@ -257,3 +257,30 @@ def test_engine_exception_propagates_to_each_caller():
         assert all(isinstance(e, RuntimeError) for e in errors)
     finally:
         batcher.stop()
+
+
+def test_stop_fails_queued_callers_without_waiting_for_batch_window():
+    engine = _FakeEngine()
+    batcher = Batcher(engine, enabled=True, max_batch_size=8, max_wait_ms=5000.0)
+    errors = []
+    started = threading.Event()
+
+    def call():
+        started.set()
+        try:
+            batcher.infer("img")
+        except Exception as e:
+            errors.append(e)
+
+    thread = threading.Thread(target=call)
+    thread.start()
+    assert started.wait(timeout=1.0)
+    time.sleep(0.05)
+
+    batcher.stop()
+    thread.join(timeout=1.0)
+
+    assert not thread.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], RuntimeError)
+    assert "batcher stopped" in str(errors[0])

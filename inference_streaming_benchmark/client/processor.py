@@ -87,9 +87,9 @@ class FrameProcessor:
                 self._stop.wait(ERROR_BACKOFF_S)
                 continue
 
-            active_client, active_transport, infer = self.session.snapshot()
+            _active_client, _active_transport, infer = self.session.snapshot()
 
-            if infer and active_client is not None and active_transport is not None:
+            if infer:
                 try:
                     if self.camera.mode == "mock":
                         max_delay_ms = self.camera.mock_delay_ms()
@@ -97,16 +97,17 @@ class FrameProcessor:
                             self._stop.wait(random.uniform(0.0, max_delay_ms) / 1000.0)
                     self._request_seq += 1
                     request_id = f"{CLIENT_NAME}-{self._request_seq:06d}"
-                    detections, timings = active_client.send(
+                    active_transport, detections, timings = self.session.send(
                         frame,
                         client_name=CLIENT_NAME,
                         request_id=request_id,
                     )
-                    self.collector.record(active_transport, timings)
-                    fps = 1000 / timings["total_ms"] if timings.get("total_ms", 0) > 0 else 0
-                    if detections is not None:
-                        frame = draw_detections(frame, detections)
-                        frame = draw_fps(frame, fps)
+                    if active_transport is not None:
+                        self.collector.record(active_transport, timings)
+                        fps = 1000 / timings["total_ms"] if timings.get("total_ms", 0) > 0 else 0
+                        if detections is not None:
+                            frame = draw_detections(frame, detections)
+                            frame = draw_fps(frame, fps)
                 except Exception:
                     logger.exception("inference send failed")
 

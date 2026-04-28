@@ -9,7 +9,7 @@ import numpy as np
 
 from inference_streaming_benchmark.logging import logger
 
-from ..base import Handler, InferenceRequest, Transport
+from ..base import CLIENT_RESPONSE_TIMEOUT_S, Handler, InferenceRequest, Transport
 from ..envelope import build, unpack
 
 
@@ -43,20 +43,27 @@ class ImageZMQTransport(Transport):
                 except Exception:
                     # imagezmq surfaces zmq.Again as a generic exception; just retry.
                     continue
-                client_name, sep, request_id = name.partition("|")
-                # imagezmq delivers a numpy ndarray directly — no JPEG decode on our side.
-                decode_ms = 0.0
-                detections, timings = handler(
-                    InferenceRequest(
-                        image=image,
-                        client_name=client_name or "unknown",
-                        request_id=request_id if sep else "",
-                        transport="imagezmq",
-                        received_at=time.perf_counter(),
+                try:
+                    client_name, sep, request_id = name.partition("|")
+                    # imagezmq delivers a numpy ndarray directly — no JPEG decode on our side.
+                    decode_ms = 0.0
+                    detections, timings = handler(
+                        InferenceRequest(
+                            image=image,
+                            client_name=client_name or "unknown",
+                            request_id=request_id if sep else "",
+                            transport="imagezmq",
+                            received_at=time.perf_counter(),
+                        )
                     )
-                )
-                timings["decode_ms"] = decode_ms
-                self._hub.send_reply(json.dumps(build(detections, timings)).encode())
+                    timings["decode_ms"] = decode_ms
+                    self._hub.send_reply(json.dumps(build(detections, timings)).encode())
+                except Exception as e:
+                    logger.exception(f"{self.name} request failed: {e}")
+                    try:
+                        self._hub.send_reply(json.dumps(build([], {"error": str(e)})).encode())
+                    except Exception:
+                        logger.exception(f"{self.name} error reply failed")
 
         self._listener_thread = threading.Thread(target=_serve, daemon=True)
         self._listener_thread.start()
@@ -77,7 +84,8 @@ class ImageZMQTransport(Transport):
         # Without a recv timeout, a server teardown mid-request leaves the REQ socket
         # blocking on recv forever — and disconnect() from another thread can't safely
         # cancel it. 5s matches the cascade window.
-        sender.zmq_socket.RCVTIMEO = 5000
+        sender.zmq_socket.RCVTIMEO = int(CLIENT_RESPONSE_TIMEOUT_S * 1000)
+        sender.zmq_socket.SNDTIMEO = int(CLIENT_RESPONSE_TIMEOUT_S * 1000)
         self._sender = sender
 
     def send(self, frame: np.ndarray, *, client_name: str = "unknown", request_id: str | None = None):
