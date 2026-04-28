@@ -38,6 +38,7 @@ let activeTransport = null;
 let lastClientsPayload = null;
 let lastMultiRunStatus = null;
 let multiRunStatusRequestSeq = 0;
+let sweepSort = { key: "run", direction: "asc" };
 // Optimistic toggles: keep user-set values visible until the heartbeat catches up
 // or PENDING_TTL_MS elapses. Keyed by `${clientName}:${action}`.
 const pendingChanges = {};
@@ -195,10 +196,30 @@ function buildMultiRunBody() {
   };
 }
 
-function formatSweepConfig(config) {
-  if (!config) return "unknown config";
-  if (!config.batching_enabled) return `${config.transport} · batch off`;
-  return `${config.transport} · batch on size ${config.max_batch_size} wait ${config.max_wait_ms}ms`;
+function formatSweepMetric(value) {
+  if (value == null || value === "-") return "-";
+  return typeof value === "number" ? value.toFixed(1) : value;
+}
+
+function sortSweepRows(rows) {
+  const direction = sweepSort.direction === "desc" ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const av = a[sweepSort.key];
+    const bv = b[sweepSort.key];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === "number" && typeof bv === "number") {
+      return (av - bv) * direction;
+    }
+    return String(av).localeCompare(String(bv)) * direction;
+  });
+}
+
+function sweepHeader(key, label) {
+  const active = sweepSort.key === key;
+  const marker = active ? (sweepSort.direction === "asc" ? " ▲" : " ▼") : "";
+  return `<th><button class="table-sort" data-sweep-sort="${escapeHtml(key)}">${escapeHtml(label)}${marker}</button></th>`;
 }
 
 function renderMultiRunResults(status) {
@@ -216,42 +237,51 @@ function renderMultiRunResults(status) {
     if (!aggregates.length) {
       rows.push({
         run: run.index,
-        config: formatSweepConfig(run.config),
+        transport: run.config?.transport || "",
+        batching: run.config?.batching_enabled ? "on" : "off",
+        maxBatchSize: run.config?.max_batch_size ?? null,
+        maxWaitMs: run.config?.max_wait_ms ?? null,
         clients: (run.clients || []).length,
         frames: 0,
-        fps: "-",
-        totalMs: "-",
-        waitMs: "-",
-        inferMs: "-",
-        batch: "-",
+        fps: null,
+        totalMs: null,
+        waitMs: null,
+        inferMs: null,
+        batch: null,
       });
       continue;
     }
     for (const r of aggregates) {
       rows.push({
         run: run.index,
-        config: formatSweepConfig(run.config),
+        transport: run.config?.transport || r.backend,
+        batching: run.config?.batching_enabled ? "on" : "off",
+        maxBatchSize: run.config?.max_batch_size ?? null,
+        maxWaitMs: run.config?.max_wait_ms ?? null,
         clients: r.clients,
         frames: r.frames,
-        fps: r.fps.toFixed(1),
-        totalMs: r.totalMs.toFixed(1),
-        waitMs: r.waitMs.toFixed(1),
-        inferMs: r.inferMs.toFixed(1),
-        batch: r.batch.toFixed(1),
+        fps: r.fps,
+        totalMs: r.totalMs,
+        waitMs: r.waitMs,
+        inferMs: r.inferMs,
+        batch: r.batch,
       });
     }
   }
-  const body = rows.map((r) => `
+  const body = sortSweepRows(rows).map((r) => `
     <tr>
       <td>${escapeHtml(r.run)}</td>
-      <td>${escapeHtml(r.config)}</td>
+      <td>${escapeHtml(r.transport)}</td>
+      <td>${escapeHtml(r.batching)}</td>
+      <td>${escapeHtml(r.maxBatchSize ?? "-")}</td>
+      <td>${escapeHtml(r.maxWaitMs ?? "-")}</td>
       <td>${escapeHtml(r.clients)}</td>
       <td>${escapeHtml(r.frames)}</td>
-      <td>${escapeHtml(r.fps)}</td>
-      <td>${escapeHtml(r.totalMs)}</td>
-      <td>${escapeHtml(r.waitMs)}</td>
-      <td>${escapeHtml(r.inferMs)}</td>
-      <td>${escapeHtml(r.batch)}</td>
+      <td>${escapeHtml(formatSweepMetric(r.fps))}</td>
+      <td>${escapeHtml(formatSweepMetric(r.totalMs))}</td>
+      <td>${escapeHtml(formatSweepMetric(r.waitMs))}</td>
+      <td>${escapeHtml(formatSweepMetric(r.inferMs))}</td>
+      <td>${escapeHtml(formatSweepMetric(r.batch))}</td>
     </tr>
   `).join("");
   multiRunResultsEl.innerHTML = `
@@ -263,15 +293,18 @@ function renderMultiRunResults(status) {
       <table class="bench-table">
         <thead>
           <tr>
-            <th>Run</th>
-            <th>Config</th>
-            <th>Clients</th>
-            <th>Frames</th>
-            <th>FPS</th>
-            <th>total (ms)</th>
-            <th>wait (ms)</th>
-            <th>infer (ms)</th>
-            <th>batch</th>
+            ${sweepHeader("run", "Run")}
+            ${sweepHeader("transport", "Transport")}
+            ${sweepHeader("batching", "Batching")}
+            ${sweepHeader("maxBatchSize", "Max size")}
+            ${sweepHeader("maxWaitMs", "Max wait")}
+            ${sweepHeader("clients", "Clients")}
+            ${sweepHeader("frames", "Frames")}
+            ${sweepHeader("fps", "FPS")}
+            ${sweepHeader("totalMs", "total (ms)")}
+            ${sweepHeader("waitMs", "wait (ms)")}
+            ${sweepHeader("inferMs", "infer (ms)")}
+            ${sweepHeader("batch", "batch")}
           </tr>
         </thead>
         <tbody>${body}</tbody>
@@ -357,6 +390,18 @@ multiRunStartBtn.addEventListener("click", startMultiRun);
 multiRunDownloadBtn.addEventListener("click", () => {
   if (!lastMultiRunStatus?.result) return;
   downloadFile("benchmark-runs.json", JSON.stringify(lastMultiRunStatus.result, null, 2), "application/json");
+});
+multiRunResultsEl.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-sweep-sort]");
+  if (!btn) return;
+  const key = btn.dataset.sweepSort;
+  if (sweepSort.key === key) {
+    sweepSort = { key, direction: sweepSort.direction === "asc" ? "desc" : "asc" };
+  } else {
+    const defaultDesc = ["fps", "frames", "clients", "batch"].includes(key);
+    sweepSort = { key, direction: defaultDesc ? "desc" : "asc" };
+  }
+  renderMultiRunResults(lastMultiRunStatus);
 });
 multiRunDownloadBtn.disabled = true;
 

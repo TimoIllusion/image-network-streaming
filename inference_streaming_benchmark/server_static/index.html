@@ -111,6 +111,17 @@
       }
       tbody td:first-child { text-align: left; font-family: inherit; font-weight: 500; }
       tbody tr:last-child td { border-bottom: none; }
+      .table-sort {
+        border: none;
+        background: transparent;
+        padding: 0;
+        color: inherit;
+        font: inherit;
+        text-transform: inherit;
+        letter-spacing: inherit;
+        cursor: pointer;
+      }
+      .table-sort:hover { color: var(--accent); }
       .age-fresh { color: var(--good); }
       .age-stale { color: var(--danger); }
       .small { font-size: 0.78rem; }
@@ -341,6 +352,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js?v=10"></script>
+    <script src="/static/app.js?v=11"></script>
   </body>
 </html>
