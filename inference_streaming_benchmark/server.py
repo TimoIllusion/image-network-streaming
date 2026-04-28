@@ -5,6 +5,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -200,11 +201,13 @@ class MultiRunManager:
 
     def status(self) -> dict:
         with self._lock:
-            return {
-                **self._state,
-                "result": self._state["result"],
-                "plan": list(self._state["plan"]),
-            }
+            return deepcopy(
+                {
+                    **self._state,
+                    "result": self._state["result"],
+                    "plan": list(self._state["plan"]),
+                }
+            )
 
 
 def _cascade_to_clients(client_registry: ClientRegistry, transport_name: str) -> None:

@@ -389,6 +389,16 @@ def test_multi_run_start_and_status():
     assert calls[0][1:] == ("http://control", 0.1, 0.0)
 
 
+def test_multi_run_status_returns_snapshot_copy():
+    manager = MultiRunManager(control_base="http://control")
+    manager._record_run({"index": 1, "config": {"transport": "grpc"}})
+
+    status = manager.status()
+    status["result"]["runs"].clear()
+
+    assert manager.status()["result"]["runs"] == [{"index": 1, "config": {"transport": "grpc"}}]
+
+
 def test_multi_run_rejects_invalid_config():
     with TestClient(build_control_app(_FakeServer())) as client:
         r = client.post("/multi-run/start", json={"transports": ["missing"]})

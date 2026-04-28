@@ -37,6 +37,7 @@ serverHost.textContent = window.location.host;
 let activeTransport = null;
 let lastClientsPayload = null;
 let lastMultiRunStatus = null;
+let multiRunStatusRequestSeq = 0;
 // Optimistic toggles: keep user-set values visible until the heartbeat catches up
 // or PENDING_TTL_MS elapses. Keyed by `${clientName}:${action}`.
 const pendingChanges = {};
@@ -257,6 +258,24 @@ function renderMultiRunResults(status) {
 }
 
 function updateMultiRunStatus(status) {
+  if (
+    lastMultiRunStatus
+    && status
+    && lastMultiRunStatus.started_at
+    && status.started_at === lastMultiRunStatus.started_at
+  ) {
+    const previousRuns = lastMultiRunStatus.result?.runs || [];
+    const incomingRuns = status.result?.runs || [];
+    if (incomingRuns.length < previousRuns.length) {
+      status = {
+        ...status,
+        result: {
+          ...(status.result || {}),
+          runs: previousRuns,
+        },
+      };
+    }
+  }
   lastMultiRunStatus = status;
   const runCount = status?.result?.runs?.length || 0;
   const planCount = status?.plan?.length || 0;
@@ -277,9 +296,13 @@ function updateMultiRunStatus(status) {
 }
 
 async function refreshMultiRunStatus() {
+  const requestSeq = ++multiRunStatusRequestSeq;
   try {
     const r = await fetch("/multi-run/status");
-    updateMultiRunStatus(await r.json());
+    const status = await r.json();
+    if (requestSeq === multiRunStatusRequestSeq) {
+      updateMultiRunStatus(status);
+    }
   } catch {
     /* transient */
   }
