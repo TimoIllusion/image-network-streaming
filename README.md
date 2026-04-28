@@ -191,6 +191,7 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 - [x] Drop the `*_Raw` subclass pattern in favor of codec injection at registration time
 - [ ] Consolidate transport `default_port` constants into the env-driven config module (still per-class today)
 - [x] **Dynamic batching on the inference engine** — server-side batcher coalesces concurrent requests into a single `model([...])` call. Toggle + tune from the central UI; new `wait (ms)` + `batch` columns surface the effect in every stats table.
+- [ ] Improve logging for batching and inference in general
 
 ## AI Assistance
 
