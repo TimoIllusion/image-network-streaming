@@ -52,6 +52,31 @@ function ageLabel(age_s) {
   return `${Math.round(age_s / 60)}m ago`;
 }
 
+function activeClients(payload = lastClientsPayload) {
+  return payload?.clients || [];
+}
+
+function allClientsEnabled(action, payload = lastClientsPayload) {
+  const clients = activeClients(payload);
+  return clients.length > 0 && clients.every((c) => {
+    const value = !!((c.stats || {})[action]);
+    return effectiveValue(c.name, action, value);
+  });
+}
+
+function updateBulkButtons(payload = lastClientsPayload) {
+  const clients = activeClients(payload);
+  const hasClients = clients.length > 0;
+  const allMock = allClientsEnabled("mock_camera", payload);
+  const allInfer = allClientsEnabled("inference", payload);
+  mockAllBtn.textContent = allMock ? "Stop mock cams all" : "Mock cams all";
+  inferAllBtn.textContent = allInfer ? "Stop inference all" : "Start inference all";
+  mockAllBtn.classList.toggle("primary", !allMock);
+  inferAllBtn.classList.toggle("primary", !allInfer);
+  mockAllBtn.disabled = !hasClients;
+  inferAllBtn.disabled = !hasClients;
+}
+
 // Track which fields the user has touched, so periodic refresh doesn't clobber in-progress edits.
 const batchFieldDirty = { enabled: false, max_batch_size: false, max_wait_ms: false };
 
@@ -281,6 +306,7 @@ function renderClients(payload) {
   const rows = payload.clients || [];
   clientCount.textContent = String(rows.length);
   renderAggregateSummary(payload);
+  updateBulkButtons(payload);
   if (!rows.length) {
     clientsDiv.innerHTML = '<p class="hint">No clients connected. Start a client with <code>INFSB_CONTROL_HOST</code> pointing here.</p>';
     return;
@@ -301,10 +327,25 @@ async function refreshClients() {
 
 function flattenForExport(payload) {
   const rows = [];
+  for (const r of collectBackendAggregates(payload)) {
+    rows.push({
+      Scope: "aggregate",
+      Client: "all",
+      Backend: r.backend,
+      "Batch config": r.config,
+      Clients: r.clients,
+      Frames: r.frames,
+      FPS: r.fps.toFixed(1),
+      "total (ms)": r.totalMs.toFixed(1),
+      "wait (ms)": r.waitMs.toFixed(1),
+      "infer (ms)": r.inferMs.toFixed(1),
+      batch: r.batch.toFixed(1),
+    });
+  }
   for (const c of payload?.clients || []) {
     const benchRows = (c.stats || {}).bench_rows || [];
     for (const r of benchRows) {
-      rows.push({ Client: c.name, ...r });
+      rows.push({ Scope: "client", Client: c.name, ...r });
     }
   }
   return rows;
@@ -312,7 +353,7 @@ function flattenForExport(payload) {
 
 function toMarkdown(rows) {
   if (!rows.length) return "";
-  const cols = Object.keys(rows[0]);
+  const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))];
   const header = `| ${cols.join(" | ")} |`;
   const sep = `| ${cols.map(() => "---").join(" | ")} |`;
   const body = rows.map((r) => `| ${cols.map((c) => r[c] ?? "").join(" | ")} |`).join("\n");
@@ -321,7 +362,7 @@ function toMarkdown(rows) {
 
 function toCSV(rows) {
   if (!rows.length) return "";
-  const cols = Object.keys(rows[0]);
+  const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))];
   const esc = (v) => {
     const s = v == null ? "" : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -460,29 +501,38 @@ switchAllBtn.addEventListener("click", async () => {
 });
 
 mockAllBtn.addEventListener("click", async () => {
+  const nextValue = !allClientsEnabled("mock_camera");
   mockAllBtn.disabled = true;
-  markAllPending("mock_camera", true);
+  markAllPending("mock_camera", nextValue);
   renderClients(lastClientsPayload || { clients: [] });
   try {
-    await postAllClientControl({ mock_camera: true }, "enabling mock cameras on all clients…");
+    await postAllClientControl(
+      { mock_camera: nextValue },
+      `${nextValue ? "enabling" : "disabling"} mock cameras on all clients…`,
+    );
   } finally {
-    mockAllBtn.disabled = false;
+    updateBulkButtons();
   }
 });
 
 inferAllBtn.addEventListener("click", async () => {
+  const nextValue = !allClientsEnabled("inference");
   const backend = backendSelect.value || activeTransport;
-  if (!backend) {
+  if (nextValue && !backend) {
     switchStatus.textContent = "no active transport";
     return;
   }
   inferAllBtn.disabled = true;
-  markAllPending("inference", true);
+  markAllPending("inference", nextValue);
   renderClients(lastClientsPayload || { clients: [] });
   try {
-    await postAllClientControl({ backend, inference: true }, `starting inference on ${backend}…`);
+    const body = nextValue ? { backend, inference: true } : { inference: false };
+    await postAllClientControl(
+      body,
+      nextValue ? `starting inference on ${backend}…` : "stopping inference on all clients…",
+    );
   } finally {
-    inferAllBtn.disabled = false;
+    updateBulkButtons();
   }
 });
 
