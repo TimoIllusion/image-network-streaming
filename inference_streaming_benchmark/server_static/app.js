@@ -253,7 +253,7 @@ function renderMultiRunResults(status) {
         <p class="aggregate-title">Sweep results</p>
         <span class="muted small">Stable snapshots captured after each run.</span>
       </div>
-      <div class="aggregate-grid">${body}</div>
+      <div class="sweep-results-list">${body}</div>
     </div>`;
 }
 
