@@ -6,6 +6,10 @@ pytest.importorskip("fastapi")
 from inference_streaming_benchmark.client.state import BenchmarkCollector  # noqa: E402
 
 
+def _only_bench(collector):
+    return next(iter(collector.bench_results.values()))
+
+
 def test_record_derives_comms_and_transmission():
     """Comms = total − encode − (decode+infer+post); transmission = total − infer."""
     collector = BenchmarkCollector()
@@ -20,7 +24,7 @@ def test_record_derives_comms_and_transmission():
         },
     )
 
-    bench = collector.bench_results["zmq"]
+    bench = _only_bench(collector)
     # server_ms = 3 + 20 + 1 = 24; comms = 30 − 2 − 24 = 4
     assert bench["comms_ms"] == [4.0]
     # transport = total − infer − post = 30 − 20 − 1 = 9 (excludes server-side JSON serialization)
@@ -46,9 +50,10 @@ def test_record_clamps_negative_comms_to_zero():
             "total_ms": 10.0,  # would yield comms = 10 − 50 − 3 = −43
         },
     )
-    assert collector.bench_results["zmq"]["comms_ms"] == [0.0]
+    bench = _only_bench(collector)
+    assert bench["comms_ms"] == [0.0]
     # transport = total − infer − post = 10 − 1 − 1 = 8 (not clamped: positive)
-    assert collector.bench_results["zmq"]["transmission_ms"] == [8.0]
+    assert bench["transmission_ms"] == [8.0]
 
 
 def test_build_stats_rows_computes_median_fps_and_frame_count():
@@ -68,6 +73,7 @@ def test_build_stats_rows_computes_median_fps_and_frame_count():
     rows = {r["Backend"]: r for r in collector.build_stats_rows()}
 
     http_row = rows["http_multipart"]
+    assert http_row["Batch config"] == "http_multipart · batch off"
     assert http_row["Frames"] == 3
     # Median of [10, 20, 30] = 20
     assert http_row["total (ms)"] == "20.0"
@@ -80,13 +86,53 @@ def test_build_stats_rows_computes_median_fps_and_frame_count():
     assert zmq_row["total (ms)"] == "25.0"
 
 
+def test_same_backend_splits_rows_by_batch_config():
+    collector = BenchmarkCollector()
+    collector.record(
+        "http_multipart",
+        {
+            "encode_ms": 1.0,
+            "decode_ms": 1.0,
+            "infer_ms": 5.0,
+            "post_ms": 0.5,
+            "total_ms": 20.0,
+            "batching_enabled": False,
+            "batching_max_batch_size": 1,
+            "batching_max_wait_ms": 0.0,
+        },
+    )
+    collector.record(
+        "http_multipart",
+        {
+            "encode_ms": 1.0,
+            "decode_ms": 1.0,
+            "infer_ms": 5.0,
+            "post_ms": 0.5,
+            "total_ms": 30.0,
+            "batching_enabled": True,
+            "batching_max_batch_size": 3,
+            "batching_max_wait_ms": 25.0,
+        },
+    )
+
+    rows = sorted(collector.build_stats_rows(), key=lambda r: r["Batch config"])
+
+    assert [r["Batch config"] for r in rows] == [
+        "http_multipart · batch off",
+        "http_multipart · batch on size 3 wait 25ms",
+    ]
+    assert [r["Frames"] for r in rows] == [1, 1]
+
+
 def test_build_stats_rows_skips_backends_with_no_samples():
     """A backend that was selected but recorded zero frames should not appear as an all-dash row."""
     collector = BenchmarkCollector()
     # setdefault creates the empty buckets without appending anything
     collector.bench_results.setdefault(
-        "websocket",
+        ("websocket", False, 1, 0.0),
         {
+            "transport_name": "websocket",
+            "bucket_label": "websocket · batch off",
             "active_time_s": 0.0,
             **{col: [] for col in ("encode_ms", "decode_ms", "infer_ms", "post_ms", "comms_ms", "transmission_ms", "total_ms")},
         },

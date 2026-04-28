@@ -39,6 +39,9 @@ def test_passthrough_when_disabled_does_not_use_queue():
         assert timings["backlog_wait_ms"] == 0.0
         assert timings["batch_fill_wait_ms"] == 0.0
         assert timings["batch_size"] == 1
+        assert timings["batching_enabled"] is False
+        assert timings["batching_max_batch_size"] == 8
+        assert timings["batching_max_wait_ms"] == 10.0
         # infer was used, not infer_batch.
         assert engine.infer_calls == 1
         assert engine.infer_batch_calls == []
@@ -99,6 +102,9 @@ def test_enabled_coalesces_concurrent_calls_into_one_batch():
         for i, (detections, timings) in enumerate(results):
             assert detections == [{"img": f"img-{i}"}]
             assert timings["batch_size"] == 4
+            assert timings["batching_enabled"] is True
+            assert timings["batching_max_batch_size"] == 8
+            assert timings["batching_max_wait_ms"] == 50.0
             assert timings["queue_wait_ms"] >= 0.0
             assert timings["backlog_wait_ms"] >= 0.0
             assert timings["batch_fill_wait_ms"] >= 0.0

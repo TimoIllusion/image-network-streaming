@@ -118,6 +118,18 @@ class BenchmarkCollector:
     def __init__(self):
         self.bench_results: dict = {}
 
+    def _bucket_key(self, transport_name: str, timings: dict) -> tuple:
+        enabled = bool(timings.get("batching_enabled", False))
+        max_batch_size = int(timings.get("batching_max_batch_size", 1))
+        max_wait_ms = float(timings.get("batching_max_wait_ms", 0.0))
+        return (transport_name, enabled, max_batch_size, max_wait_ms)
+
+    def _bucket_label(self, key: tuple) -> str:
+        transport_name, enabled, max_batch_size, max_wait_ms = key
+        if not enabled:
+            return f"{transport_name} · batch off"
+        return f"{transport_name} · batch on size {max_batch_size} wait {max_wait_ms:g}ms"
+
     def record(self, transport_name: str, timings: dict) -> None:
         infer = timings.get("infer_ms", 0.0)
         post = timings.get("post_ms", 0.0)
@@ -132,9 +144,18 @@ class BenchmarkCollector:
         transmission_ms = max(0.0, total - infer - post - queue_wait)
         timings = {**timings, "comms_ms": comms_ms, "transmission_ms": transmission_ms}
 
+        key = self._bucket_key(transport_name, timings)
         bench = self.bench_results.setdefault(
-            transport_name,
-            {"active_time_s": 0.0, **{col: [] for col in TIMING_COLUMNS + NUMERIC_COLUMNS}},
+            key,
+            {
+                "transport_name": transport_name,
+                "bucket_label": self._bucket_label(key),
+                "batching_enabled": bool(key[1]),
+                "batching_max_batch_size": int(key[2]),
+                "batching_max_wait_ms": float(key[3]),
+                "active_time_s": 0.0,
+                **{col: [] for col in TIMING_COLUMNS + NUMERIC_COLUMNS},
+            },
         )
         for col in TIMING_COLUMNS + NUMERIC_COLUMNS:
             if col in timings:
@@ -146,13 +167,14 @@ class BenchmarkCollector:
 
     def build_stats_rows(self) -> list[dict]:
         rows = []
-        for name, data in self.bench_results.items():
+        for _key, data in self.bench_results.items():
             totals = data["total_ms"]
             if not totals:
                 continue
             duration_s = data["active_time_s"]
             row = {
-                "Backend": name,
+                "Backend": data.get("transport_name", "unknown"),
+                "Batch config": data.get("bucket_label", "unknown"),
                 "Frames": len(totals),
                 "Duration (s)": f"{duration_s:.1f}",
                 "FPS": f"{len(totals) / duration_s:.1f}" if duration_s > 0 else "-",

@@ -57,6 +57,13 @@ class Batcher:
                 "max_wait_ms": self._max_wait_ms,
             }
 
+    def _state_unlocked(self) -> dict:
+        return {
+            "batching_enabled": self._enabled,
+            "batching_max_batch_size": self._max_batch_size,
+            "batching_max_wait_ms": self._max_wait_ms,
+        }
+
     def configure(
         self,
         *,
@@ -91,11 +98,13 @@ class Batcher:
         request = self._normalize_request(request)
         with self._cfg_lock:
             enabled = self._enabled
+            batch_config = self._state_unlocked()
         if not enabled:
             t0 = time.perf_counter()
             detections, timings = self._engine.infer(request.image)
             full_timings = {
                 **timings,
+                **batch_config,
                 "queue_wait_ms": 0.0,
                 "backlog_wait_ms": 0.0,
                 "batch_fill_wait_ms": 0.0,
@@ -166,6 +175,7 @@ class Batcher:
             with self._cfg_lock:
                 max_batch_size = self._max_batch_size
                 max_wait_ms = self._max_wait_ms
+                batch_config = self._state_unlocked()
             logger.info(
                 f"batch dispatch size={batch_size} max_size={max_batch_size} "
                 f"max_wait={max_wait_ms:.1f}ms backlog_wait_max={max_backlog_wait_ms:.1f}ms "
@@ -173,7 +183,7 @@ class Batcher:
             )
         for (request, future, enqueued_at), (detections, timings) in zip(batch, results, strict=True):
             waits = self._split_wait(enqueued_at, batch_opened_at, t_call_start)
-            full_timings = {**timings, **waits, "batch_size": batch_size}
+            full_timings = {**timings, **batch_config, **waits, "batch_size": batch_size}
             self._log_request(request, full_timings, mode="batch")
             future.set_result((detections, full_timings))
 

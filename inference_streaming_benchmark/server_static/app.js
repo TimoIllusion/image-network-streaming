@@ -11,6 +11,7 @@ const downloadCsvBtn = document.getElementById("downloadCsv");
 const switchStatus = document.getElementById("switchStatus");
 const clientsDiv = document.getElementById("clients");
 const clientCount = document.getElementById("clientCount");
+const aggregateSummary = document.getElementById("aggregateSummary");
 const serverHost = document.getElementById("serverHost");
 const batchEnabledEl = document.getElementById("batchEnabled");
 const batchSizeEl = document.getElementById("batchSize");
@@ -144,6 +145,107 @@ function renderBenchTable(rows) {
   return `<table class="bench-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+function parseMetric(value) {
+  const n = Number.parseFloat(String(value ?? "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function weightedAverage(values) {
+  let totalWeight = 0;
+  let total = 0;
+  for (const { value, weight } of values) {
+    if (!Number.isFinite(value) || !Number.isFinite(weight) || weight <= 0) continue;
+    total += value * weight;
+    totalWeight += weight;
+  }
+  return totalWeight > 0 ? total / totalWeight : 0;
+}
+
+function collectBackendAggregates(payload) {
+  const byConfig = new Map();
+  for (const c of payload?.clients || []) {
+    const rows = (c.stats || {}).bench_rows || [];
+    for (const row of rows) {
+      const backend = row.Backend;
+      const config = row["Batch config"] || backend;
+      if (!backend) continue;
+      const item = byConfig.get(config) || {
+        backend,
+        config,
+        clients: 0,
+        frames: 0,
+        fps: 0,
+        totalSamples: [],
+        waitSamples: [],
+        inferSamples: [],
+        batchSamples: [],
+      };
+      const frames = parseMetric(row.Frames);
+      item.clients += 1;
+      item.frames += frames;
+      item.fps += parseMetric(row.FPS);
+      item.totalSamples.push({ value: parseMetric(row["total (ms)"]), weight: frames });
+      item.waitSamples.push({ value: parseMetric(row["wait (ms)"]), weight: frames });
+      item.inferSamples.push({ value: parseMetric(row["infer (ms)"]), weight: frames });
+      item.batchSamples.push({ value: parseMetric(row.batch), weight: frames });
+      byConfig.set(config, item);
+    }
+  }
+  return [...byConfig.values()].map((item) => ({
+    backend: item.backend,
+    config: item.config,
+    clients: item.clients,
+    frames: item.frames,
+    fps: item.fps,
+    totalMs: weightedAverage(item.totalSamples),
+    waitMs: weightedAverage(item.waitSamples),
+    inferMs: weightedAverage(item.inferSamples),
+    batch: weightedAverage(item.batchSamples),
+  })).sort((a, b) => b.fps - a.fps);
+}
+
+function metricBar(label, value, max, suffix, latency = false) {
+  const pct = max > 0 ? Math.max(2, Math.min(100, (value / max) * 100)) : 0;
+  return `
+    <div class="metric-line">
+      <span class="metric-label">${label}</span>
+      <span class="metric-track"><span class="metric-fill ${latency ? "latency" : ""}" style="width: ${pct.toFixed(1)}%;"></span></span>
+      <span class="metric-value">${value.toFixed(1)}${suffix}</span>
+    </div>`;
+}
+
+function renderAggregateSummary(payload) {
+  const rows = collectBackendAggregates(payload);
+  if (!rows.length) {
+    aggregateSummary.innerHTML = "";
+    return;
+  }
+  const maxFps = Math.max(...rows.map((r) => r.fps), 0);
+  const maxLatency = Math.max(...rows.map((r) => r.totalMs), 0);
+  const maxInfer = Math.max(...rows.map((r) => r.inferMs), 0);
+  const active = payload?.active_transport || activeTransport;
+  const body = rows.map((r) => `
+    <div class="aggregate-row ${r.backend === active ? "active" : ""}">
+      <div class="aggregate-row-head">
+        <span class="aggregate-backend">${escapeHtml(r.config)}</span>
+        <span class="muted small">${r.clients} clients · ${r.frames} frames · batch ${r.batch.toFixed(1)}</span>
+      </div>
+      ${metricBar("throughput", r.fps, maxFps, " fps")}
+      ${metricBar("latency", r.totalMs, maxLatency, " ms", true)}
+      ${metricBar("infer", r.inferMs, maxInfer, " ms", true)}
+      ${metricBar("wait", r.waitMs, maxLatency, " ms", true)}
+    </div>
+  `).join("");
+  aggregateSummary.innerHTML = `
+    <div class="aggregate-panel">
+      <div class="aggregate-header">
+        <p class="aggregate-title">Aggregate performance</p>
+        <span class="muted small">Grouped by transport and batching config.</span>
+      </div>
+      <div class="aggregate-grid">${body}</div>
+    </div>`;
+}
+
 function renderClientCard(c) {
   const s = c.stats || {};
   const ageClass = c.age_s < 5 ? "age-fresh" : "age-stale";
@@ -178,6 +280,7 @@ function renderClientCard(c) {
 function renderClients(payload) {
   const rows = payload.clients || [];
   clientCount.textContent = String(rows.length);
+  renderAggregateSummary(payload);
   if (!rows.length) {
     clientsDiv.innerHTML = '<p class="hint">No clients connected. Start a client with <code>INFSB_CONTROL_HOST</code> pointing here.</p>';
     return;
