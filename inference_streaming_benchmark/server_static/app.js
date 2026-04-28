@@ -243,11 +243,11 @@ function renderMultiRunResults(status) {
         maxWaitMs: run.config?.max_wait_ms ?? null,
         clients: (run.clients || []).length,
         frames: 0,
-        fps: null,
-        totalMs: null,
-        waitMs: null,
-        inferMs: null,
-        batch: null,
+        throughput: null,
+        latency: null,
+        infer: null,
+        wait: null,
+        avgBatch: null,
       });
       continue;
     }
@@ -260,11 +260,11 @@ function renderMultiRunResults(status) {
         maxWaitMs: run.config?.max_wait_ms ?? null,
         clients: r.clients,
         frames: r.frames,
-        fps: r.fps,
-        totalMs: r.totalMs,
-        waitMs: r.waitMs,
-        inferMs: r.inferMs,
-        batch: r.batch,
+        throughput: r.fps,
+        latency: r.totalMs,
+        infer: r.inferMs,
+        wait: r.waitMs,
+        avgBatch: r.batch,
       });
     }
   }
@@ -277,11 +277,11 @@ function renderMultiRunResults(status) {
       <td>${escapeHtml(r.maxWaitMs ?? "-")}</td>
       <td>${escapeHtml(r.clients)}</td>
       <td>${escapeHtml(r.frames)}</td>
-      <td>${escapeHtml(formatSweepMetric(r.fps))}</td>
-      <td>${escapeHtml(formatSweepMetric(r.totalMs))}</td>
-      <td>${escapeHtml(formatSweepMetric(r.waitMs))}</td>
-      <td>${escapeHtml(formatSweepMetric(r.inferMs))}</td>
-      <td>${escapeHtml(formatSweepMetric(r.batch))}</td>
+      <td>${escapeHtml(formatSweepMetric(r.throughput))}</td>
+      <td>${escapeHtml(formatSweepMetric(r.latency))}</td>
+      <td>${escapeHtml(formatSweepMetric(r.infer))}</td>
+      <td>${escapeHtml(formatSweepMetric(r.wait))}</td>
+      <td>${escapeHtml(formatSweepMetric(r.avgBatch))}</td>
     </tr>
   `).join("");
   multiRunResultsEl.innerHTML = `
@@ -300,11 +300,11 @@ function renderMultiRunResults(status) {
             ${sweepHeader("maxWaitMs", "Max wait")}
             ${sweepHeader("clients", "Clients")}
             ${sweepHeader("frames", "Frames")}
-            ${sweepHeader("fps", "FPS")}
-            ${sweepHeader("totalMs", "total (ms)")}
-            ${sweepHeader("waitMs", "wait (ms)")}
-            ${sweepHeader("inferMs", "infer (ms)")}
-            ${sweepHeader("batch", "batch")}
+            ${sweepHeader("throughput", "Throughput")}
+            ${sweepHeader("latency", "Latency")}
+            ${sweepHeader("infer", "Infer")}
+            ${sweepHeader("wait", "Wait")}
+            ${sweepHeader("avgBatch", "Avg batch")}
           </tr>
         </thead>
         <tbody>${body}</tbody>
@@ -398,7 +398,7 @@ multiRunResultsEl.addEventListener("click", (event) => {
   if (sweepSort.key === key) {
     sweepSort = { key, direction: sweepSort.direction === "asc" ? "desc" : "asc" };
   } else {
-    const defaultDesc = ["fps", "frames", "clients", "batch"].includes(key);
+    const defaultDesc = ["throughput", "frames", "clients", "avgBatch"].includes(key);
     sweepSort = { key, direction: defaultDesc ? "desc" : "asc" };
   }
   renderMultiRunResults(lastMultiRunStatus);
