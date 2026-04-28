@@ -190,6 +190,8 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 - [x] Centralize raw payload codec and `FRAME_SHAPE` in one module (`transports/codec.py`)
 - [x] Drop the `*_Raw` subclass pattern in favor of codec injection at registration time
 - [ ] Consolidate transport `default_port` constants into the env-driven config module (still per-class today)
+- [ ] Improve dynamic batching with flexible batch sizes and waiting times
+- [ ] Add a multi-run feature that sweeps multiple configs for benchmarking
 - [x] **Dynamic batching on the inference engine** — server-side batcher coalesces concurrent requests into a single `model([...])` call. Toggle + tune from the central UI; new `wait (ms)` + `batch` columns surface the effect in every stats table.
 - [x] Improve logging for batching and inference in general — Ultralytics per-frame console timing is silenced, duplicate HTTP timing logs are debug-only, and server logs now include request id, client, transport, direct/batch mode, queue wait split into backlog/batch-fill, batch size, inference, postprocess, and total server timing where available.
 
