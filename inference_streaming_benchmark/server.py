@@ -5,20 +5,23 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 import requests
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from inference_streaming_benchmark.batcher import Batcher
 from inference_streaming_benchmark.client_registry import ClientRegistry
 from inference_streaming_benchmark.config import BATCH_ENABLED, BATCH_SIZE, BATCH_WAIT_MS, CONTROL_PORT
 from inference_streaming_benchmark.engine import InferenceEngine
 from inference_streaming_benchmark.logging import logger
+from inference_streaming_benchmark.multi_run import SweepConfig, build_plan, run_sweep
 from inference_streaming_benchmark.transports import registry
 from inference_streaming_benchmark.transports.base import Transport
 
@@ -116,6 +119,85 @@ class BatchingBody(BaseModel):
     max_wait_ms: float | None = None
 
 
+class MultiRunBody(BaseModel):
+    transports: list[str]
+    batch_modes: list[str] = Field(default_factory=lambda: ["off", "on"])
+    batch_sizes: list[int] = Field(default_factory=lambda: [1, 2, 4, 8])
+    batch_waits_ms: list[float] = Field(default_factory=lambda: [0.0, 5.0, 10.0, 20.0])
+    duration_s: float = 10.0
+    warmup_s: float = 2.0
+
+
+class MultiRunManager:
+    def __init__(
+        self,
+        *,
+        control_base: str,
+        runner=run_sweep,
+    ):
+        self._control_base = control_base
+        self._runner = runner
+        self._lock = threading.RLock()
+        self._thread: threading.Thread | None = None
+        self._state: dict[str, Any] = {
+            "running": False,
+            "started_at": None,
+            "finished_at": None,
+            "error": None,
+            "plan": [],
+            "result": None,
+        }
+
+    def start(self, plan: list[SweepConfig], *, duration_s: float, warmup_s: float) -> dict:
+        with self._lock:
+            if self._state["running"]:
+                raise RuntimeError("multi-run already running")
+            self._state = {
+                "running": True,
+                "started_at": time.time(),
+                "finished_at": None,
+                "error": None,
+                "plan": [asdict(item) for item in plan],
+                "result": None,
+            }
+            self._thread = threading.Thread(
+                target=self._run,
+                args=(plan, duration_s, warmup_s),
+                daemon=True,
+                name="multi-run",
+            )
+            self._thread.start()
+            return self.status()
+
+    def _run(self, plan: list[SweepConfig], duration_s: float, warmup_s: float) -> None:
+        try:
+            result = self._runner(
+                plan,
+                control_base=self._control_base,
+                duration_s=duration_s,
+                warmup_s=warmup_s,
+            )
+            with self._lock:
+                self._state["result"] = result
+                self._state["error"] = None
+        except Exception as exc:
+            logger.exception("multi-run failed")
+            with self._lock:
+                self._state["error"] = str(exc)
+        finally:
+            with self._lock:
+                self._state["running"] = False
+                self._state["finished_at"] = time.time()
+
+    def status(self) -> dict:
+        with self._lock:
+            return {
+                **self._state,
+                "result": self._state["result"],
+                "plan": list(self._state["plan"]),
+            }
+
+
 def _cascade_to_clients(client_registry: ClientRegistry, transport_name: str) -> None:
     """After a switch, tell every registered client to reconnect to the new transport.
 
@@ -135,9 +217,15 @@ def _cascade_to_clients(client_registry: ClientRegistry, transport_name: str) ->
             logger.warning(f"cascade to client {record.name} ({record.ui_url}) failed: {e}")
 
 
-def build_control_app(server: Server, client_registry: ClientRegistry | None = None) -> FastAPI:
+def build_control_app(
+    server: Server,
+    client_registry: ClientRegistry | None = None,
+    multi_run_manager: MultiRunManager | None = None,
+) -> FastAPI:
     if client_registry is None:
         client_registry = ClientRegistry()
+    if multi_run_manager is None:
+        multi_run_manager = MultiRunManager(control_base=f"http://localhost:{CONTROL_PORT}")
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -286,6 +374,39 @@ def build_control_app(server: Server, client_registry: ClientRegistry | None = N
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/multi-run/start")
+    def multi_run_start(body: MultiRunBody):
+        unknown_transports = sorted(set(body.transports) - set(registry.all_transports()))
+        if unknown_transports:
+            raise HTTPException(status_code=400, detail=f"unknown transport(s): {', '.join(unknown_transports)}")
+        bad_modes = sorted(set(body.batch_modes) - {"off", "on"})
+        if bad_modes:
+            raise HTTPException(status_code=400, detail=f"unknown batch mode(s): {', '.join(bad_modes)}")
+        if not body.transports:
+            raise HTTPException(status_code=400, detail="at least one transport is required")
+        if not body.batch_modes:
+            raise HTTPException(status_code=400, detail="at least one batch mode is required")
+        if any(size < 1 for size in body.batch_sizes):
+            raise HTTPException(status_code=400, detail="batch sizes must be >= 1")
+        if any(wait_ms < 0 for wait_ms in body.batch_waits_ms):
+            raise HTTPException(status_code=400, detail="batch waits must be >= 0")
+        if body.duration_s <= 0:
+            raise HTTPException(status_code=400, detail="duration_s must be > 0")
+        if body.warmup_s < 0:
+            raise HTTPException(status_code=400, detail="warmup_s must be >= 0")
+
+        plan = build_plan(body.transports, body.batch_modes, body.batch_sizes, body.batch_waits_ms)
+        if not plan:
+            raise HTTPException(status_code=400, detail="multi-run plan is empty")
+        try:
+            return multi_run_manager.start(plan, duration_s=body.duration_s, warmup_s=body.warmup_s)
+        except RuntimeError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+
+    @app.get("/multi-run/status")
+    def multi_run_status():
+        return multi_run_manager.status()
 
     @app.post("/clients/clear-all")
     def clients_clear_all():

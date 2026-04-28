@@ -20,11 +20,22 @@ const batchSizeEl = document.getElementById("batchSize");
 const batchWaitEl = document.getElementById("batchWait");
 const batchApplyBtn = document.getElementById("batchApply");
 const batchStatus = document.getElementById("batchStatus");
+const multiRunTransportsEl = document.getElementById("multiRunTransports");
+const multiRunBatchOffEl = document.getElementById("multiRunBatchOff");
+const multiRunBatchOnEl = document.getElementById("multiRunBatchOn");
+const multiRunBatchSizesEl = document.getElementById("multiRunBatchSizes");
+const multiRunBatchWaitsEl = document.getElementById("multiRunBatchWaits");
+const multiRunWarmupEl = document.getElementById("multiRunWarmup");
+const multiRunDurationEl = document.getElementById("multiRunDuration");
+const multiRunStartBtn = document.getElementById("multiRunStart");
+const multiRunDownloadBtn = document.getElementById("multiRunDownload");
+const multiRunStatusEl = document.getElementById("multiRunStatus");
 
 serverHost.textContent = window.location.host;
 
 let activeTransport = null;
 let lastClientsPayload = null;
+let lastMultiRunStatus = null;
 // Optimistic toggles: keep user-set values visible until the heartbeat catches up
 // or PENDING_TTL_MS elapses. Keyed by `${clientName}:${action}`.
 const pendingChanges = {};
@@ -147,6 +158,99 @@ batchSizeEl.addEventListener("input", () => markDirty("max_batch_size"));
 batchWaitEl.addEventListener("input", () => markDirty("max_wait_ms"));
 batchApplyBtn.addEventListener("click", applyBatching);
 
+function parseNumberList(value, parser) {
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map(parser);
+}
+
+function selectedMultiRunTransports() {
+  return [...multiRunTransportsEl.querySelectorAll("input[type='checkbox']:checked")].map((el) => el.value);
+}
+
+function renderMultiRunTransportOptions(items) {
+  const selected = new Set(selectedMultiRunTransports());
+  const hadOptions = multiRunTransportsEl.querySelectorAll("input[type='checkbox']").length > 0;
+  multiRunTransportsEl.innerHTML = items.map((item) => {
+    const checked = !hadOptions || selected.has(item.name) ? "checked" : "";
+    return `<label class="control-pill"><input type="checkbox" value="${escapeHtml(item.name)}" ${checked} /> ${escapeHtml(item.name)}</label>`;
+  }).join("");
+}
+
+function buildMultiRunBody() {
+  const batchModes = [];
+  if (multiRunBatchOffEl.checked) batchModes.push("off");
+  if (multiRunBatchOnEl.checked) batchModes.push("on");
+  return {
+    transports: selectedMultiRunTransports(),
+    batch_modes: batchModes,
+    batch_sizes: parseNumberList(multiRunBatchSizesEl.value, (item) => Number.parseInt(item, 10)),
+    batch_waits_ms: parseNumberList(multiRunBatchWaitsEl.value, Number.parseFloat),
+    warmup_s: Number.parseFloat(multiRunWarmupEl.value),
+    duration_s: Number.parseFloat(multiRunDurationEl.value),
+  };
+}
+
+function updateMultiRunStatus(status) {
+  lastMultiRunStatus = status;
+  const runCount = status?.result?.runs?.length || 0;
+  const planCount = status?.plan?.length || 0;
+  if (!status) {
+    multiRunStatusEl.textContent = "idle";
+  } else if (status.running) {
+    multiRunStatusEl.textContent = `running ${runCount}/${planCount}`;
+  } else if (status.error) {
+    multiRunStatusEl.textContent = `failed: ${status.error}`;
+  } else if (runCount > 0) {
+    multiRunStatusEl.textContent = `finished ${runCount}/${planCount}`;
+  } else {
+    multiRunStatusEl.textContent = "idle";
+  }
+  multiRunStartBtn.disabled = !!status?.running;
+  multiRunDownloadBtn.disabled = runCount === 0;
+}
+
+async function refreshMultiRunStatus() {
+  try {
+    const r = await fetch("/multi-run/status");
+    updateMultiRunStatus(await r.json());
+  } catch {
+    /* transient */
+  }
+}
+
+async function startMultiRun() {
+  const body = buildMultiRunBody();
+  multiRunStartBtn.disabled = true;
+  multiRunStatusEl.textContent = "starting…";
+  try {
+    const r = await fetch("/multi-run/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = await r.json();
+    if (!r.ok) {
+      multiRunStatusEl.textContent = `failed: ${payload.detail || r.statusText}`;
+      multiRunStartBtn.disabled = false;
+      return;
+    }
+    updateMultiRunStatus(payload);
+  } catch (e) {
+    multiRunStatusEl.textContent = `failed: ${e}`;
+    multiRunStartBtn.disabled = false;
+  }
+}
+
+multiRunStartBtn.addEventListener("click", startMultiRun);
+multiRunDownloadBtn.addEventListener("click", () => {
+  if (!lastMultiRunStatus?.result) return;
+  downloadFile("benchmark-runs.json", JSON.stringify(lastMultiRunStatus.result, null, 2), "application/json");
+});
+multiRunDownloadBtn.disabled = true;
+
 async function refreshTransports() {
   try {
     const r = await fetch("/transports");
@@ -162,6 +266,7 @@ async function refreshTransports() {
       if (item.active) activeTransport = item.name;
     }
     backendSelect.value = previous || activeTransport || items[0]?.name || "";
+    renderMultiRunTransportOptions(items);
   } catch {
     /* server might be reloading; the next tick will retry */
   }
@@ -605,6 +710,8 @@ downloadCsvBtn.addEventListener("click", () => {
 refreshTransports();
 refreshClients();
 refreshBatching();
+refreshMultiRunStatus();
 setInterval(refreshTransports, POLL_MS * 3);
 setInterval(refreshClients, POLL_MS);
 setInterval(refreshBatching, POLL_MS * 3);
+setInterval(refreshMultiRunStatus, POLL_MS);

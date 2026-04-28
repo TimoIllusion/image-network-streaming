@@ -1,3 +1,4 @@
+import time
 from unittest.mock import patch
 
 import pytest
@@ -9,7 +10,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from inference_streaming_benchmark import transports  # noqa: F401, E402 — triggers registration
 from inference_streaming_benchmark.client_registry import ClientRegistry  # noqa: E402
-from inference_streaming_benchmark.server import build_control_app  # noqa: E402
+from inference_streaming_benchmark.server import MultiRunManager, build_control_app  # noqa: E402
 from inference_streaming_benchmark.transports import registry  # noqa: E402
 
 
@@ -351,6 +352,48 @@ def test_switch_without_cascade_does_not_post_to_clients():
             r = client.post("/switch", json={"name": "grpc"})  # no cascade flag
     assert r.status_code == 200
     posted.assert_not_called()
+
+
+def test_multi_run_start_and_status():
+    calls = []
+
+    def _runner(plan, *, control_base, duration_s, warmup_s):
+        calls.append((plan, control_base, duration_s, warmup_s))
+        return {"runs": [{"index": 1, "config": {"transport": plan[0].transport}}]}
+
+    manager = MultiRunManager(control_base="http://control", runner=_runner)
+    with TestClient(build_control_app(_FakeServer(), multi_run_manager=manager)) as client:
+        r = client.post(
+            "/multi-run/start",
+            json={
+                "transports": ["grpc"],
+                "batch_modes": ["off", "on"],
+                "batch_sizes": [2],
+                "batch_waits_ms": [5],
+                "duration_s": 0.1,
+                "warmup_s": 0,
+            },
+        )
+        assert r.status_code == 200
+        for _ in range(20):
+            status = client.get("/multi-run/status").json()
+            if not status["running"]:
+                break
+            time.sleep(0.01)
+
+    assert status["error"] is None
+    assert len(status["plan"]) == 2
+    assert status["result"]["runs"][0]["config"] == {"transport": "grpc"}
+    assert calls[0][1:] == ("http://control", 0.1, 0.0)
+
+
+def test_multi_run_rejects_invalid_config():
+    with TestClient(build_control_app(_FakeServer())) as client:
+        r = client.post("/multi-run/start", json={"transports": ["missing"]})
+        assert r.status_code == 400
+
+        r = client.post("/multi-run/start", json={"transports": ["grpc"], "batch_modes": ["maybe"]})
+        assert r.status_code == 400
 
 
 def test_client_clear_proxies_to_client():

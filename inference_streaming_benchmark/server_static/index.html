@@ -55,7 +55,7 @@
         transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
       }
       select:hover, button:hover { border-color: var(--muted); }
-      input[type="number"] {
+      input[type="number"], input[type="text"] {
         font: inherit;
         font-size: 0.9rem;
         color: var(--fg);
@@ -227,6 +227,15 @@
         background: var(--accent);
       }
       .metric-fill.latency { background: var(--good); }
+      .option-list { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+      .multi-run-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.75rem 1rem;
+        align-items: end;
+      }
+      .multi-run-field { display: flex; flex-direction: column; gap: 0.35rem; }
+      .multi-run-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.85rem; }
     </style>
   </head>
   <body>
@@ -277,6 +286,44 @@
       </div>
 
       <div class="card">
+        <h2 style="margin: 0 0 0.75rem 0; font-size: 1.05rem; font-weight: 600;">Multi-run sweep</h2>
+        <div class="multi-run-grid">
+          <div class="multi-run-field">
+            <label class="small muted">transports</label>
+            <div class="option-list" id="multiRunTransports"></div>
+          </div>
+          <div class="multi-run-field">
+            <label class="small muted">batch modes</label>
+            <div class="option-list">
+              <label class="control-pill"><input type="checkbox" id="multiRunBatchOff" checked /> off</label>
+              <label class="control-pill"><input type="checkbox" id="multiRunBatchOn" checked /> on</label>
+            </div>
+          </div>
+          <div class="multi-run-field">
+            <label for="multiRunBatchSizes" class="small muted">batch sizes</label>
+            <input id="multiRunBatchSizes" type="text" value="1,2,4,8" />
+          </div>
+          <div class="multi-run-field">
+            <label for="multiRunBatchWaits" class="small muted">batch waits (ms)</label>
+            <input id="multiRunBatchWaits" type="text" value="0,5,10,20" />
+          </div>
+          <div class="multi-run-field">
+            <label for="multiRunWarmup" class="small muted">warmup (s)</label>
+            <input id="multiRunWarmup" type="number" min="0" step="0.5" value="2" />
+          </div>
+          <div class="multi-run-field">
+            <label for="multiRunDuration" class="small muted">duration (s)</label>
+            <input id="multiRunDuration" type="number" min="0.1" step="0.5" value="10" />
+          </div>
+        </div>
+        <div class="multi-run-actions">
+          <button id="multiRunStart" class="primary">Start sweep</button>
+          <button id="multiRunDownload">Download JSON</button>
+          <span class="hint" id="multiRunStatus">idle</span>
+        </div>
+      </div>
+
+      <div class="card">
         <h2 style="margin: 0 0 0.75rem 0; font-size: 1.05rem; font-weight: 600;">
           Connected clients <span class="badge" id="clientCount">0</span>
         </h2>
@@ -293,6 +340,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js?v=7"></script>
+    <script src="/static/app.js?v=8"></script>
   </body>
 </html>
