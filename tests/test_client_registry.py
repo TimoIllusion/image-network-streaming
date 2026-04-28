@@ -9,7 +9,7 @@ def test_register_creates_record():
     assert rec.name == "rpi-1"
     assert rec.ui_url == "http://10.0.0.5:8501"
     assert rec.last_heartbeat_at == rec.registered_at
-    assert reg.get("rpi-1") is rec
+    assert reg.get("rpi-1") == rec
 
 
 def test_register_replaces_existing_entry():
@@ -49,8 +49,8 @@ def test_list_active_filters_stale():
     """Stale clients (no heartbeat past cutoff) age out lazily on list_active."""
     reg = ClientRegistry()
     reg.register("fresh", "http://x", "")
-    rec = reg.register("stale", "http://y", "")
-    rec.last_heartbeat_at = time.time() - 30  # forced stale
+    reg.register("stale", "http://y", "")
+    reg._records["stale"].last_heartbeat_at = time.time() - 30  # forced stale
 
     active = reg.list_active(stale_after_s=5.0)
     names = {r.name for r in active}
@@ -73,3 +73,18 @@ def test_to_dict_includes_age_s():
     assert d["name"] == "rpi-1"
     assert d["ui_url"] == "http://10.0.0.5:8501"
     assert "age_s" in d and d["age_s"] >= 0
+
+
+def test_registry_returns_snapshots_not_live_records():
+    reg = ClientRegistry()
+    record = reg.register("rpi-1", "http://10.0.0.5:8501", "")
+    record.ui_url = "http://mutated"
+    record.stats["backend"] = "zmq"
+
+    stored = reg.get("rpi-1")
+    assert stored.ui_url == "http://10.0.0.5:8501"
+    assert stored.stats == {}
+
+    listed = reg.list_active()
+    listed[0].ui_url = "http://mutated-again"
+    assert reg.get("rpi-1").ui_url == "http://10.0.0.5:8501"

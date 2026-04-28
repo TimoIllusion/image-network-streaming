@@ -4,11 +4,15 @@ import queue
 import threading
 import time
 from concurrent.futures import Future
+from concurrent.futures import TimeoutError as FutureTimeoutError
 
 import numpy as np
 
 from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.transports.base import InferenceRequest
+
+INFER_RESULT_TIMEOUT_S = 60.0
+_STOP_ITEM = object()
 
 
 class Batcher:
@@ -46,6 +50,7 @@ class Batcher:
         self._queue: queue.Queue = queue.Queue()
         self._cfg_lock = threading.Lock()
         self._stop = threading.Event()
+        self._worker_error: BaseException | None = None
         self._worker = threading.Thread(target=self._loop, daemon=True, name="batcher-worker")
         self._worker.start()
 
@@ -90,8 +95,11 @@ class Batcher:
 
     def stop(self) -> None:
         self._stop.set()
+        self._fail_queued(RuntimeError("batcher stopped"))
+        self._queue.put(_STOP_ITEM)
         if self._worker.is_alive():
             self._worker.join(timeout=2.0)
+        self._fail_queued(RuntimeError("batcher stopped"))
 
     def infer(self, request):
         """Same shape as ``engine.infer`` — returns ``(detections, timings)``."""
@@ -114,8 +122,15 @@ class Batcher:
             return detections, full_timings
 
         future: Future = Future()
+        if self._stop.is_set():
+            raise RuntimeError("batcher stopped")
+        if self._worker_error is not None:
+            raise RuntimeError("batcher worker failed") from self._worker_error
         self._queue.put((request, future, time.perf_counter()))
-        return future.result()
+        try:
+            return future.result(timeout=INFER_RESULT_TIMEOUT_S)
+        except FutureTimeoutError as e:
+            raise TimeoutError("timed out waiting for batched inference result") from e
 
     def _normalize_request(self, request) -> InferenceRequest:
         if isinstance(request, InferenceRequest):
@@ -125,29 +140,58 @@ class Batcher:
         return InferenceRequest(image=request, received_at=time.perf_counter())
 
     def _loop(self) -> None:
-        while not self._stop.is_set():
-            try:
-                first = self._queue.get(timeout=0.1)
-            except queue.Empty:
-                continue
-
-            with self._cfg_lock:
-                max_batch_size = self._max_batch_size
-                max_wait_ms = self._max_wait_ms
-
-            batch = [first]
-            batch_opened_at = time.perf_counter()
-            deadline = batch_opened_at + max_wait_ms / 1000.0
-            while len(batch) < max_batch_size:
-                remaining = deadline - time.perf_counter()
-                if remaining <= 0:
-                    break
+        try:
+            while not self._stop.is_set():
                 try:
-                    batch.append(self._queue.get(timeout=remaining))
+                    first = self._queue.get(timeout=0.1)
                 except queue.Empty:
+                    continue
+                if first is _STOP_ITEM:
                     break
 
-            self._dispatch(batch, batch_opened_at)
+                with self._cfg_lock:
+                    max_batch_size = self._max_batch_size
+                    max_wait_ms = self._max_wait_ms
+
+                batch = [first]
+                batch_opened_at = time.perf_counter()
+                deadline = batch_opened_at + max_wait_ms / 1000.0
+                while len(batch) < max_batch_size and not self._stop.is_set():
+                    remaining = deadline - time.perf_counter()
+                    if remaining <= 0:
+                        break
+                    try:
+                        item = self._queue.get(timeout=remaining)
+                    except queue.Empty:
+                        break
+                    if item is _STOP_ITEM:
+                        self._fail_batch(batch, RuntimeError("batcher stopped"))
+                        return
+                    batch.append(item)
+
+                if self._stop.is_set():
+                    self._fail_batch(batch, RuntimeError("batcher stopped"))
+                    break
+                self._dispatch(batch, batch_opened_at)
+        except BaseException as exc:
+            self._worker_error = exc
+            self._fail_queued(RuntimeError("batcher worker failed"))
+            logger.exception("batcher worker failed")
+
+    def _fail_batch(self, batch: list, exc: BaseException) -> None:
+        for _request, future, _enqueued_at in batch:
+            if not future.done():
+                future.set_exception(exc)
+
+    def _fail_queued(self, exc: BaseException) -> None:
+        while True:
+            try:
+                item = self._queue.get_nowait()
+            except queue.Empty:
+                return
+            if item is _STOP_ITEM:
+                continue
+            self._fail_batch([item], exc)
 
     def _dispatch(self, batch: list, batch_opened_at: float) -> None:
         t_call_start = time.perf_counter()

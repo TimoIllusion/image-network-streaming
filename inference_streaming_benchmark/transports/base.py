@@ -10,6 +10,7 @@ import numpy as np
 
 Detections = list[dict]
 Timings = dict[str, float]
+CLIENT_RESPONSE_TIMEOUT_S = 5.0
 
 
 @dataclass(frozen=True)

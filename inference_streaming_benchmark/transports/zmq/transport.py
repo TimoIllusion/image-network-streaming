@@ -9,7 +9,7 @@ import zmq
 
 from inference_streaming_benchmark.logging import logger
 
-from ..base import Handler, InferenceRequest, Transport
+from ..base import CLIENT_RESPONSE_TIMEOUT_S, Handler, InferenceRequest, Transport
 from ..codec import decode, encode
 from ..envelope import build, unpack
 
@@ -50,26 +50,33 @@ class ZMQTransport(Transport):
                     parts = self._server_socket.recv_multipart()
                 except zmq.Again:
                     continue
-                if len(parts) == 1:
-                    meta = {}
-                    image_data = parts[0]
-                else:
-                    meta = json.loads(parts[0].decode())
-                    image_data = parts[1]
-                t0 = time.perf_counter()
-                image = decode(image_data, raw=raw)
-                decode_ms = (time.perf_counter() - t0) * 1000
-                detections, timings = handler(
-                    InferenceRequest(
-                        image=image,
-                        client_name=meta.get("client_name", "unknown"),
-                        request_id=meta.get("request_id", ""),
-                        transport=log_name,
-                        received_at=t0,
+                try:
+                    if len(parts) == 1:
+                        meta = {}
+                        image_data = parts[0]
+                    else:
+                        meta = json.loads(parts[0].decode())
+                        image_data = parts[1]
+                    t0 = time.perf_counter()
+                    image = decode(image_data, raw=raw)
+                    decode_ms = (time.perf_counter() - t0) * 1000
+                    detections, timings = handler(
+                        InferenceRequest(
+                            image=image,
+                            client_name=meta.get("client_name", "unknown"),
+                            request_id=meta.get("request_id", ""),
+                            transport=log_name,
+                            received_at=t0,
+                        )
                     )
-                )
-                timings["decode_ms"] = decode_ms
-                self._server_socket.send_json(build(detections, timings))
+                    timings["decode_ms"] = decode_ms
+                    self._server_socket.send_json(build(detections, timings))
+                except Exception as e:
+                    logger.exception(f"{log_name} request failed: {e}")
+                    try:
+                        self._server_socket.send_json(build([], {"error": str(e)}))
+                    except Exception:
+                        logger.exception(f"{log_name} error reply failed")
 
         self._listener_thread = threading.Thread(target=_serve, daemon=True)
         self._listener_thread.start()
@@ -93,7 +100,8 @@ class ZMQTransport(Transport):
         socket = ctx.socket(zmq.REQ)
         # REQ socket has no recv timeout by default — if the server tears down
         # mid-request, recv_json blocks forever. 5s matches the cascade window.
-        socket.RCVTIMEO = 5000
+        socket.RCVTIMEO = int(CLIENT_RESPONSE_TIMEOUT_S * 1000)
+        socket.SNDTIMEO = int(CLIENT_RESPONSE_TIMEOUT_S * 1000)
         socket.connect(f"tcp://{host}:{port}")
         self._client_ctx = ctx
         self._client_socket = socket

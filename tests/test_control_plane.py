@@ -201,12 +201,14 @@ def test_client_control_proxies_to_client_url():
     def _fake_post(url, json=None, timeout=None):
         sent["url"] = url
         sent["json"] = json
-        return _FakeResponse({
-            "ok": True,
-            "backend": json.get("backend"),
-            "mock_camera": json.get("mock_camera"),
-            "mock_delay_ms": json.get("mock_delay_ms"),
-        })
+        return _FakeResponse(
+            {
+                "ok": True,
+                "backend": json.get("backend"),
+                "mock_camera": json.get("mock_camera"),
+                "mock_delay_ms": json.get("mock_delay_ms"),
+            }
+        )
 
     with TestClient(build_control_app(_FakeServer(), reg)) as client:
         with patch("inference_streaming_benchmark.server.requests.post", side_effect=_fake_post):

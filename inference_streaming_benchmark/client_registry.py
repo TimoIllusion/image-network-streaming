@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 DEFAULT_STALE_AFTER_S = 10.0
 
@@ -15,6 +15,9 @@ class ClientRecord:
     registered_at: float
     last_heartbeat_at: float
     stats: dict = field(default_factory=dict)
+
+    def snapshot(self) -> ClientRecord:
+        return replace(self, stats=dict(self.stats))
 
     def to_dict(self) -> dict:
         return {
@@ -49,7 +52,7 @@ class ClientRegistry:
         )
         with self._lock:
             self._records[name] = record
-        return record
+            return record.snapshot()
 
     def heartbeat(self, name: str, stats: dict) -> ClientRecord:
         with self._lock:
@@ -58,11 +61,12 @@ class ClientRegistry:
                 raise KeyError(name)
             record.last_heartbeat_at = time.time()
             record.stats = stats
-            return record
+            return record.snapshot()
 
     def get(self, name: str) -> ClientRecord | None:
         with self._lock:
-            return self._records.get(name)
+            record = self._records.get(name)
+            return None if record is None else record.snapshot()
 
     def list_active(self, stale_after_s: float = DEFAULT_STALE_AFTER_S) -> list[ClientRecord]:
         cutoff = time.time() - stale_after_s
@@ -70,7 +74,7 @@ class ClientRegistry:
             stale = [name for name, r in self._records.items() if r.last_heartbeat_at < cutoff]
             for name in stale:
                 del self._records[name]
-            return list(self._records.values())
+            return [record.snapshot() for record in self._records.values()]
 
     def remove(self, name: str) -> bool:
         with self._lock:

@@ -88,20 +88,30 @@ class TransportSession:
     def set(self, transport_name: str, infer: bool, port: int) -> None:
         """Swap to (transport_name, port). Caller resolved the port via control_client."""
         with self.lock:
-            self.infer = infer
             if not infer:
+                self.infer = False
                 self._disconnect_locked()
                 return
 
             if self.active_transport == transport_name and self.client is not None:
+                self.infer = True
                 return
 
-            self._disconnect_locked()
             cls = registry.get(transport_name)
             client = cls()
-            client.connect(CONTROL_HOST, port)
+            try:
+                client.connect(CONTROL_HOST, port)
+            except Exception:
+                if hasattr(client, "disconnect"):
+                    try:
+                        client.disconnect()
+                    except Exception:
+                        logger.exception("failed to clean up transport after connect failure")
+                raise
+            self._disconnect_locked()
             self.client = client
             self.active_transport = transport_name
+            self.infer = True
             logger.info(f"client connected: {transport_name} → :{port}")
 
     def set_infer(self, infer: bool) -> None:
@@ -125,12 +135,28 @@ class TransportSession:
         with self.lock:
             return self.client, self.active_transport, self.infer
 
+    def send(self, frame, *, client_name: str, request_id: str):
+        """Send one inference request on the active client without racing disconnect().
+
+        Some transports, notably ImageZMQ/ZMQ, do not tolerate closing their socket
+        from another thread while a REQ/REP send is in progress. Holding the session
+        lock around send means control-plane switches wait for the in-flight request
+        to finish or hit the transport timeout before disconnecting the old client.
+        """
+        with self.lock:
+            if not self.infer or self.client is None or self.active_transport is None:
+                return None, None, {}
+            transport_name = self.active_transport
+            detections, timings = self.client.send(frame, client_name=client_name, request_id=request_id)
+            return transport_name, detections, timings
+
 
 class BenchmarkCollector:
-    """Per-backend timing accumulator. Pure: no locks, no IO."""
+    """Thread-safe per-backend timing accumulator."""
 
     def __init__(self):
         self.bench_results: dict = {}
+        self._lock = threading.RLock()
 
     def _bucket_key(self, transport_name: str, timings: dict) -> tuple:
         enabled = bool(timings.get("batching_enabled", False))
@@ -145,70 +171,73 @@ class BenchmarkCollector:
         return f"{transport_name} · batch on size {max_batch_size} wait {max_wait_ms:g}ms"
 
     def record(self, transport_name: str, timings: dict) -> None:
-        infer = timings.get("infer_ms", 0.0)
-        post = timings.get("post_ms", 0.0)
-        queue_wait = timings.get("queue_wait_ms", 0.0)
-        encode = timings.get("encode_ms", 0.0)
-        decode = timings.get("decode_ms", 0.0)
-        total = timings.get("total_ms", 0.0)
+        with self._lock:
+            infer = timings.get("infer_ms", 0.0)
+            post = timings.get("post_ms", 0.0)
+            queue_wait = timings.get("queue_wait_ms", 0.0)
+            encode = timings.get("encode_ms", 0.0)
+            decode = timings.get("decode_ms", 0.0)
+            total = timings.get("total_ms", 0.0)
 
-        # `transmission` (network + codec only) is total minus everything that's
-        # server-side processing or queueing.
-        comms_ms = max(0.0, total - encode - decode - infer - post - queue_wait)
-        transmission_ms = max(0.0, total - infer - post - queue_wait)
-        timings = {**timings, "comms_ms": comms_ms, "transmission_ms": transmission_ms}
+            # `transmission` (network + codec only) is total minus everything that's
+            # server-side processing or queueing.
+            comms_ms = max(0.0, total - encode - decode - infer - post - queue_wait)
+            transmission_ms = max(0.0, total - infer - post - queue_wait)
+            timings = {**timings, "comms_ms": comms_ms, "transmission_ms": transmission_ms}
 
-        key = self._bucket_key(transport_name, timings)
-        bench = self.bench_results.setdefault(
-            key,
-            {
-                "transport_name": transport_name,
-                "bucket_label": self._bucket_label(key),
-                "batching_enabled": bool(key[1]),
-                "batching_max_batch_size": int(key[2]),
-                "batching_max_wait_ms": float(key[3]),
-                "active_time_s": 0.0,
-                **{col: [] for col in TIMING_COLUMNS + NUMERIC_COLUMNS},
-            },
-        )
-        for col in TIMING_COLUMNS + NUMERIC_COLUMNS:
-            if col in timings:
-                bench[col].append(timings[col])
-        bench["active_time_s"] += total / 1000
+            key = self._bucket_key(transport_name, timings)
+            bench = self.bench_results.setdefault(
+                key,
+                {
+                    "transport_name": transport_name,
+                    "bucket_label": self._bucket_label(key),
+                    "batching_enabled": bool(key[1]),
+                    "batching_max_batch_size": int(key[2]),
+                    "batching_max_wait_ms": float(key[3]),
+                    "active_time_s": 0.0,
+                    **{col: [] for col in TIMING_COLUMNS + NUMERIC_COLUMNS},
+                },
+            )
+            for col in TIMING_COLUMNS + NUMERIC_COLUMNS:
+                if col in timings:
+                    bench[col].append(timings[col])
+            bench["active_time_s"] += total / 1000
 
     def clear(self) -> None:
-        self.bench_results = {}
+        with self._lock:
+            self.bench_results = {}
 
     def build_stats_rows(self) -> list[dict]:
-        rows = []
-        for _key, data in self.bench_results.items():
-            totals = data["total_ms"]
-            if not totals:
-                continue
-            duration_s = data["active_time_s"]
-            row = {
-                "Backend": data.get("transport_name", "unknown"),
-                "Batch config": data.get("bucket_label", "unknown"),
-                "Frames": len(totals),
-                "Duration (s)": f"{duration_s:.1f}",
-                "FPS": f"{len(totals) / duration_s:.1f}" if duration_s > 0 else "-",
-            }
-            abbrevs = {
-                "transmission_ms": "transport (ms)",
-                "encode_ms": "enc (ms)",
-                "decode_ms": "dec (ms)",
-                "queue_wait_ms": "wait (ms)",
-            }
-            for col in TIMING_COLUMNS:
-                samples = data[col]
-                label = abbrevs.get(col, col.replace("_ms", " (ms)"))
-                row[label] = f"{statistics.median(samples):.1f}" if samples else "-"
-            for col in NUMERIC_COLUMNS:
-                samples = data[col]
-                label = "batch" if col == "batch_size" else col
-                row[label] = f"{statistics.median(samples):.1f}" if samples else "-"
-            rows.append(row)
-        return rows
+        with self._lock:
+            rows = []
+            for _key, data in self.bench_results.items():
+                totals = data["total_ms"]
+                if not totals:
+                    continue
+                duration_s = data["active_time_s"]
+                row = {
+                    "Backend": data.get("transport_name", "unknown"),
+                    "Batch config": data.get("bucket_label", "unknown"),
+                    "Frames": len(totals),
+                    "Duration (s)": f"{duration_s:.1f}",
+                    "FPS": f"{len(totals) / duration_s:.1f}" if duration_s > 0 else "-",
+                }
+                abbrevs = {
+                    "transmission_ms": "transport (ms)",
+                    "encode_ms": "enc (ms)",
+                    "decode_ms": "dec (ms)",
+                    "queue_wait_ms": "wait (ms)",
+                }
+                for col in TIMING_COLUMNS:
+                    samples = list(data[col])
+                    label = abbrevs.get(col, col.replace("_ms", " (ms)"))
+                    row[label] = f"{statistics.median(samples):.1f}" if samples else "-"
+                for col in NUMERIC_COLUMNS:
+                    samples = list(data[col])
+                    label = "batch" if col == "batch_size" else col
+                    row[label] = f"{statistics.median(samples):.1f}" if samples else "-"
+                rows.append(row)
+            return rows
 
     def snapshot_for_heartbeat(self, active_transport: str | None) -> dict:
         """Heartbeat payload: currently-active backend + full per-backend history.

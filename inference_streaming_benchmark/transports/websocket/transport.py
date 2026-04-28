@@ -12,7 +12,7 @@ from websockets.sync.server import serve as ws_serve
 
 from inference_streaming_benchmark.logging import logger
 
-from ..base import Handler, InferenceRequest, Transport
+from ..base import CLIENT_RESPONSE_TIMEOUT_S, Handler, InferenceRequest, Transport
 from ..codec import decode, encode
 from ..envelope import build, unpack
 
@@ -46,22 +46,28 @@ class WebSocketTransport(Transport):
             logger.info(f"{log_name} client connected")
             try:
                 while True:
-                    meta = json.loads(ws.recv())
-                    data = ws.recv()
-                    t0 = time.perf_counter()
-                    image = decode(data, raw=raw)
-                    decode_ms = (time.perf_counter() - t0) * 1000
-                    detections, timings = handler(
-                        InferenceRequest(
-                            image=image,
-                            client_name=meta.get("client_name", "unknown"),
-                            request_id=meta.get("request_id", ""),
-                            transport=log_name,
-                            received_at=t0,
+                    try:
+                        meta = json.loads(ws.recv())
+                        data = ws.recv()
+                        t0 = time.perf_counter()
+                        image = decode(data, raw=raw)
+                        decode_ms = (time.perf_counter() - t0) * 1000
+                        detections, timings = handler(
+                            InferenceRequest(
+                                image=image,
+                                client_name=meta.get("client_name", "unknown"),
+                                request_id=meta.get("request_id", ""),
+                                transport=log_name,
+                                received_at=t0,
+                            )
                         )
-                    )
-                    timings["decode_ms"] = decode_ms
-                    ws.send(json.dumps(build(detections, timings)))
+                        timings["decode_ms"] = decode_ms
+                        ws.send(json.dumps(build(detections, timings)))
+                    except ConnectionClosed:
+                        raise
+                    except Exception as e:
+                        logger.exception(f"{log_name} request failed: {e}")
+                        ws.send(json.dumps(build([], {"error": str(e)})))
             except ConnectionClosed:
                 logger.info(f"{log_name} client disconnected")
 
@@ -87,7 +93,13 @@ class WebSocketTransport(Transport):
     # ----- client role -----
 
     def connect(self, host: str, port: int) -> None:
-        self._ws = ws_connect(f"ws://{host}:{port}/", max_size=16 * 1024 * 1024, compression=None)
+        self._ws = ws_connect(
+            f"ws://{host}:{port}/",
+            max_size=16 * 1024 * 1024,
+            compression=None,
+            open_timeout=CLIENT_RESPONSE_TIMEOUT_S,
+            close_timeout=CLIENT_RESPONSE_TIMEOUT_S,
+        )
 
     def send(self, frame: np.ndarray, *, client_name: str = "unknown", request_id: str | None = None):
         timings: dict[str, float] = {}
@@ -103,7 +115,7 @@ class WebSocketTransport(Transport):
 
                 ws.send(json.dumps({"client_name": client_name, "request_id": request_id or ""}))
                 ws.send(payload)
-                response = ws.recv()
+                response = ws.recv(timeout=CLIENT_RESPONSE_TIMEOUT_S)
                 timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
                 detections, server_timings = unpack(json.loads(response))
