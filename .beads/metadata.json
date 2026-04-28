@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "inference_streaming_benchmark",
+  "project_id": "174e32b1-b6fb-4366-be09-7b4f9e1a5b99"
+}
