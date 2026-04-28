@@ -113,6 +113,23 @@ The `transport (ms)` column is `total − infer − post − wait`, so it stays 
 
 **Caveat for ZMQ/ImageZMQ:** these transports submit one frame at a time (REQ/REP semantics), so the batcher never coalesces — it just adds the `max_wait_ms` timeout penalty. The `batch` column staying at `1` and `wait (ms)` matching `max_wait_ms` makes this visible. Leave batching off for those transports unless you're explicitly studying the trade-off.
 
+### Multi-run benchmark sweeps
+
+With the server and one or more clients already running, sweep transports and batching configs from the control plane:
+
+```bash
+uv run infsb-multi-run \
+  --transports http_multipart_raw,grpc,websocket_raw \
+  --batch off,on \
+  --batch-sizes 1,4,8 \
+  --batch-waits-ms 0,5,10 \
+  --duration-s 10 \
+  --warmup-s 2 \
+  --output benchmark-runs.json
+```
+
+Each run applies the batching config, switches all active clients to the selected transport with inference on, warms up, clears stats, measures for the configured duration, then stores the `/clients` snapshot in the output JSON.
+
 | Env var               | Default              | Purpose                                      |
 | --------------------- | -------------------- | -------------------------------------------- |
 | `INFSB_CONTROL_HOST`  | `localhost`          | Server hostname/IP the client should reach   |
@@ -191,7 +208,7 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 - [x] Drop the `*_Raw` subclass pattern in favor of codec injection at registration time
 - [ ] Consolidate transport `default_port` constants into the env-driven config module (still per-class today)
 - [ ] Improve dynamic batching with flexible batch sizes and waiting times
-- [ ] Add a multi-run feature that sweeps multiple configs for benchmarking
+- [x] Add a multi-run feature that sweeps multiple configs for benchmarking
 - [x] **Dynamic batching on the inference engine** — server-side batcher coalesces concurrent requests into a single `model([...])` call. Toggle + tune from the central UI; new `wait (ms)` + `batch` columns surface the effect in every stats table.
 - [x] Improve logging for batching and inference in general — Ultralytics per-frame console timing is silenced, duplicate HTTP timing logs are debug-only, and server logs now include request id, client, transport, direct/batch mode, queue wait split into backlog/batch-fill, batch size, inference, postprocess, and total server timing where available.
 

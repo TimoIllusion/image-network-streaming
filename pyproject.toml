@@ -52,6 +52,9 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/TimoIllusion/inference-streaming-benchmark"
 
+[project.scripts]
+infsb-multi-run = "inference_streaming_benchmark.multi_run:main"
+
 [tool.setuptools]
 include-package-data = true
 
@@ -89,4 +92,3 @@ ignore = ["E203"]
 
 [tool.ruff.format]
 line-ending = "auto"
-
