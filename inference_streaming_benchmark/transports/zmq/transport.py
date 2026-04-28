@@ -74,31 +74,49 @@ class ZMQTransport(Transport):
     # ----- client role -----
 
     def connect(self, host: str, port: int) -> None:
-        self._client_ctx = zmq.Context()
-        self._client_socket = self._client_ctx.socket(zmq.REQ)
-        self._client_socket.connect(f"tcp://{host}:{port}")
+        ctx = zmq.Context()
+        socket = ctx.socket(zmq.REQ)
+        # REQ socket has no recv timeout by default — if the server tears down
+        # mid-request, recv_json blocks forever. 5s matches the cascade window.
+        socket.RCVTIMEO = 5000
+        socket.connect(f"tcp://{host}:{port}")
+        self._client_ctx = ctx
+        self._client_socket = socket
 
     def send(self, frame: np.ndarray):
-        assert self._client_socket is not None, "connect() first"
+        socket = self._client_socket
         timings: dict[str, float] = {}
-        t_total = time.perf_counter()
+        if socket is None:
+            return None, timings
+        try:
+            t_total = time.perf_counter()
+            t0 = time.perf_counter()
+            payload = encode(frame, raw=self.RAW)
+            timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
-        t0 = time.perf_counter()
-        payload = encode(frame, raw=self.RAW)
-        timings["encode_ms"] = (time.perf_counter() - t0) * 1000
+            socket.send(payload)
+            response = socket.recv_json()
+            timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
-        self._client_socket.send(payload)
-        response = self._client_socket.recv_json()
-        timings["total_ms"] = (time.perf_counter() - t_total) * 1000
-
-        detections, server_timings = unpack(response)
-        timings.update(server_timings)
-        return detections, timings
+            detections, server_timings = unpack(response)
+            timings.update(server_timings)
+            return detections, timings
+        except Exception as e:
+            logger.error(f"{self.name} send failed: {e}")
+            return None, timings
 
     def disconnect(self) -> None:
-        if self._client_socket is not None:
-            self._client_socket.close(linger=0)
-        if self._client_ctx is not None:
-            self._client_ctx.term()
+        socket = self._client_socket
+        ctx = self._client_ctx
         self._client_socket = None
         self._client_ctx = None
+        if socket is not None:
+            try:
+                socket.close(linger=0)
+            except Exception:
+                logger.exception(f"{self.name} disconnect failed")
+        if ctx is not None:
+            try:
+                ctx.term()
+            except Exception:
+                logger.exception(f"{self.name} ctx term failed")

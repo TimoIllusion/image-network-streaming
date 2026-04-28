@@ -25,7 +25,6 @@ class ImageZMQTransport(Transport):
         self._stop_event = threading.Event()
         # client state
         self._sender: imagezmq.ImageSender | None = None
-        self._sending = False
 
     # ----- server role -----
 
@@ -65,26 +64,37 @@ class ImageZMQTransport(Transport):
     # ----- client role -----
 
     def connect(self, host: str, port: int) -> None:
-        self._sender = imagezmq.ImageSender(connect_to=f"tcp://{host}:{port}")
+        sender = imagezmq.ImageSender(connect_to=f"tcp://{host}:{port}")
+        # Without a recv timeout, a server teardown mid-request leaves the REQ socket
+        # blocking on recv forever — and disconnect() from another thread can't safely
+        # cancel it. 5s matches the cascade window.
+        sender.zmq_socket.RCVTIMEO = 5000
+        self._sender = sender
 
     def send(self, frame: np.ndarray):
-        assert self._sender is not None, "connect() first"
-        timings: dict[str, float] = {}
-        timings["encode_ms"] = 0.0  # no client-side encode — imagezmq sends raw ndarray
-
-        t_total = time.perf_counter()
-        self._sending = True
-        response_bytes = self._sender.send_image("frame", frame)
-        self._sending = False
-        timings["total_ms"] = (time.perf_counter() - t_total) * 1000
-
-        detections, server_timings = unpack(json.loads(response_bytes))
-        timings.update(server_timings)
-        return detections, timings
+        sender = self._sender
+        timings: dict[str, float] = {"encode_ms": 0.0}
+        if sender is None:
+            return None, timings
+        try:
+            t_total = time.perf_counter()
+            response_bytes = sender.send_image("frame", frame)
+            timings["total_ms"] = (time.perf_counter() - t_total) * 1000
+            detections, server_timings = unpack(json.loads(response_bytes))
+            timings.update(server_timings)
+            return detections, timings
+        except Exception as e:
+            logger.error(f"{self.name} send failed: {e}")
+            return None, timings
 
     def disconnect(self) -> None:
-        while self._sending:
-            time.sleep(0.05)
-        if self._sender is not None:
-            self._sender.close()
+        sender = self._sender
         self._sender = None
+        if sender is not None:
+            try:
+                # linger=0 cancels any in-flight recv on this socket immediately,
+                # so a wedged send() in another thread unblocks instead of hanging
+                # the swap.
+                sender.zmq_socket.close(linger=0)
+            except Exception:
+                logger.exception(f"{self.name} disconnect failed")

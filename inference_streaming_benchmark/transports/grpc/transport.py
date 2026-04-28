@@ -91,42 +91,54 @@ class GRPCTransport(Transport):
     # ----- client role -----
 
     def connect(self, host: str, port: int) -> None:
-        self._channel = grpc.insecure_channel(f"{host}:{port}", options=_GRPC_OPTIONS)
-        self._stub = AiDetectionServiceStub(self._channel)
+        channel = grpc.insecure_channel(f"{host}:{port}", options=_GRPC_OPTIONS)
+        self._channel = channel
+        self._stub = AiDetectionServiceStub(channel)
 
     def send(self, frame: np.ndarray):
-        assert self._stub is not None, "connect() first"
+        stub = self._stub
         timings: dict[str, float] = {}
-        t_total = time.perf_counter()
+        if stub is None:
+            return None, timings
+        try:
+            t_total = time.perf_counter()
+            t0 = time.perf_counter()
+            frame_bytes = frame.tobytes()
+            timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
-        t0 = time.perf_counter()
-        frame_bytes = frame.tobytes()
-        timings["encode_ms"] = (time.perf_counter() - t0) * 1000
+            # 5s deadline matches the cascade window — without it a server teardown
+            # mid-RPC could keep the call hanging until grpc's default keepalive trips.
+            response = stub.Detect(FrameRequest(image=frame_bytes), timeout=5.0)
+            timings["total_ms"] = (time.perf_counter() - t_total) * 1000
+            timings["decode_ms"] = response.timings.decode_ms
+            timings["infer_ms"] = response.timings.infer_ms
+            timings["post_ms"] = response.timings.post_ms
 
-        response = self._stub.Detect(FrameRequest(image=frame_bytes))
-        timings["total_ms"] = (time.perf_counter() - t_total) * 1000
-        timings["decode_ms"] = response.timings.decode_ms
-        timings["infer_ms"] = response.timings.infer_ms
-        timings["post_ms"] = response.timings.post_ms
+            if not response.results:
+                return None, timings
 
-        if not response.results:
+            first = response.results[0]
+            detections = []
+            for box, conf, cl in zip(first.boxes, first.scores, first.classes, strict=False):
+                detections.append(
+                    {
+                        "box": {"x1": box.x1, "y1": box.y1, "x2": box.x2, "y2": box.y2},
+                        "confidence": conf,
+                        "class": cl,
+                        "name": cl,
+                    }
+                )
+            return detections, timings
+        except Exception as e:
+            logger.error(f"{self.name} send failed: {e}")
             return None, timings
 
-        first = response.results[0]
-        detections = []
-        for box, conf, cl in zip(first.boxes, first.scores, first.classes, strict=False):
-            detections.append(
-                {
-                    "box": {"x1": box.x1, "y1": box.y1, "x2": box.x2, "y2": box.y2},
-                    "confidence": conf,
-                    "class": cl,
-                    "name": cl,
-                }
-            )
-        return detections, timings
-
     def disconnect(self) -> None:
-        if self._channel is not None:
-            self._channel.close()
+        channel = self._channel
         self._channel = None
         self._stub = None
+        if channel is not None:
+            try:
+                channel.close()
+            except Exception:
+                logger.exception(f"{self.name} disconnect failed")

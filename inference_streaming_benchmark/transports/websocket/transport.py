@@ -81,17 +81,19 @@ class WebSocketTransport(Transport):
         self._ws = ws_connect(f"ws://{host}:{port}/", max_size=16 * 1024 * 1024, compression=None)
 
     def send(self, frame: np.ndarray):
-        assert self._ws is not None, "connect() first"
         timings: dict[str, float] = {}
         with self._lock:
+            ws = self._ws
+            if ws is None:
+                return None, timings
             try:
                 t_total = time.perf_counter()
                 t0 = time.perf_counter()
                 payload = encode(frame, raw=self.RAW)
                 timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
-                self._ws.send(payload)
-                response = self._ws.recv()
+                ws.send(payload)
+                response = ws.recv()
                 timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
                 detections, server_timings = unpack(json.loads(response))
@@ -102,9 +104,10 @@ class WebSocketTransport(Transport):
                 return None, timings
 
     def disconnect(self) -> None:
-        if self._ws is not None:
+        ws = self._ws
+        self._ws = None
+        if ws is not None:
             try:
-                self._ws.close()
+                ws.close()
             except Exception:
                 logger.exception(f"{self.name} disconnect failed")
-            self._ws = None

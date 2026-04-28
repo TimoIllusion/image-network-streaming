@@ -80,8 +80,13 @@ class HTTPMultipartTransport(FastAPITransport):
         self._session = requests.Session()
 
     def send(self, frame: np.ndarray):
-        assert self._session is not None and self._url is not None, "connect() first"
+        # Capture locally so a concurrent disconnect() (clearing self._session) can't
+        # turn this into an AttributeError mid-request — it just becomes a clean error.
+        session = self._session
+        url = self._url
         timings: dict[str, float] = {}
+        if session is None or url is None:
+            return None, timings
         try:
             t_total = time.perf_counter()
             t0 = time.perf_counter()
@@ -89,15 +94,15 @@ class HTTPMultipartTransport(FastAPITransport):
             timings["encode_ms"] = (time.perf_counter() - t0) * 1000
 
             if self.RAW:
-                response = self._session.post(
-                    self._url,
+                response = session.post(
+                    url,
                     data=payload,
                     headers={"Content-Type": "application/octet-stream"},
                     timeout=(2, 30),
                 )
             else:
                 files = {"file": ("frame.jpg", io.BytesIO(payload), "image/jpeg")}
-                response = self._session.post(self._url, files=files, timeout=(2, 30))
+                response = session.post(url, files=files, timeout=(2, 30))
             timings["total_ms"] = (time.perf_counter() - t_total) * 1000
 
             if response.status_code == 200:
@@ -105,7 +110,7 @@ class HTTPMultipartTransport(FastAPITransport):
                 timings.update(server_timings)
                 return detections, timings
             return None, timings
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        except Exception as e:
             logger.error(f"{self.name} send failed: {e}")
             return None, timings
 
