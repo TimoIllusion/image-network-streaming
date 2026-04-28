@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import threading
 import time
 
 import numpy as np
@@ -19,6 +20,7 @@ class InferenceEngine:
 
     def __init__(self):
         self._model = None
+        self._lock = threading.Lock()
 
     def _get_or_load_model(self):
         if self._model is not None:
@@ -35,14 +37,16 @@ class InferenceEngine:
             device = "cpu"
 
         logger.info(f"Loading YOLO model on device: {device}")
-        self._model = YOLO("yolov8n.pt")
-        self._model.to(device)
+        model = YOLO("yolov8n.pt")
+        model.to(device)
+        self._model = model
         return self._model
 
     def infer(self, image: np.ndarray) -> tuple[list[dict], dict]:
-        t0 = time.perf_counter()
-        results = self._get_or_load_model()(image, verbose=False)
-        t1 = time.perf_counter()
+        with self._lock:
+            t0 = time.perf_counter()
+            results = self._get_or_load_model()(image, verbose=False)
+            t1 = time.perf_counter()
         out = [json.loads(result.to_json()) for result in results]
         t2 = time.perf_counter()
         timings = {"infer_ms": (t1 - t0) * 1000, "post_ms": (t2 - t1) * 1000}
@@ -61,9 +65,10 @@ class InferenceEngine:
         """
         if not images:
             return []
-        t0 = time.perf_counter()
-        results = self._get_or_load_model()(images, verbose=False)
-        t1 = time.perf_counter()
+        with self._lock:
+            t0 = time.perf_counter()
+            results = self._get_or_load_model()(images, verbose=False)
+            t1 = time.perf_counter()
         infer_ms = (t1 - t0) * 1000
 
         out: list[tuple[list, dict]] = []
