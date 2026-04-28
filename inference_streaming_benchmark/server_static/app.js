@@ -207,53 +207,75 @@ function renderMultiRunResults(status) {
     multiRunResultsEl.innerHTML = "";
     return;
   }
-  const body = runs.map((run) => {
-    const rows = collectBackendAggregates({
+  const rows = [];
+  for (const run of runs) {
+    const aggregates = collectBackendAggregates({
       active_transport: run.active_transport,
       clients: run.clients || [],
     });
-    const metrics = rows.length
-      ? rows.map((r) => `
-          <tr>
-            <td>${escapeHtml(r.config)}</td>
-            <td>${escapeHtml(r.clients)}</td>
-            <td>${escapeHtml(r.frames)}</td>
-            <td>${r.fps.toFixed(1)}</td>
-            <td>${r.totalMs.toFixed(1)}</td>
-            <td>${r.waitMs.toFixed(1)}</td>
-            <td>${r.batch.toFixed(1)}</td>
-          </tr>
-        `).join("")
-      : `<tr><td colspan="7" class="muted">No frames recorded for this run.</td></tr>`;
-    return `
-      <div class="aggregate-row">
-        <div class="aggregate-row-head">
-          <span class="aggregate-backend">Run ${run.index}: ${escapeHtml(formatSweepConfig(run.config))}</span>
-          <span class="muted small">${(run.clients || []).length} clients</span>
-        </div>
-        <table class="bench-table">
-          <thead>
-            <tr>
-              <th>Config</th>
-              <th>Clients</th>
-              <th>Frames</th>
-              <th>FPS</th>
-              <th>total (ms)</th>
-              <th>wait (ms)</th>
-              <th>batch</th>
-            </tr>
-          </thead>
-          <tbody>${metrics}</tbody>
-        </table>
-      </div>`;
-  }).join("");
+    if (!aggregates.length) {
+      rows.push({
+        run: run.index,
+        config: formatSweepConfig(run.config),
+        clients: (run.clients || []).length,
+        frames: 0,
+        fps: "-",
+        totalMs: "-",
+        waitMs: "-",
+        inferMs: "-",
+        batch: "-",
+      });
+      continue;
+    }
+    for (const r of aggregates) {
+      rows.push({
+        run: run.index,
+        config: formatSweepConfig(run.config),
+        clients: r.clients,
+        frames: r.frames,
+        fps: r.fps.toFixed(1),
+        totalMs: r.totalMs.toFixed(1),
+        waitMs: r.waitMs.toFixed(1),
+        inferMs: r.inferMs.toFixed(1),
+        batch: r.batch.toFixed(1),
+      });
+    }
+  }
+  const body = rows.map((r) => `
+    <tr>
+      <td>${escapeHtml(r.run)}</td>
+      <td>${escapeHtml(r.config)}</td>
+      <td>${escapeHtml(r.clients)}</td>
+      <td>${escapeHtml(r.frames)}</td>
+      <td>${escapeHtml(r.fps)}</td>
+      <td>${escapeHtml(r.totalMs)}</td>
+      <td>${escapeHtml(r.waitMs)}</td>
+      <td>${escapeHtml(r.inferMs)}</td>
+      <td>${escapeHtml(r.batch)}</td>
+    </tr>
+  `).join("");
   multiRunResultsEl.innerHTML = `
     <div class="aggregate-panel">
       <div class="aggregate-header">
         <p class="aggregate-title">Sweep results</p>
         <span class="muted small">Stable snapshots captured after each run.</span>
       </div>
-      <div class="sweep-results-list">${body}</div>
+      <table class="bench-table">
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th>Config</th>
+            <th>Clients</th>
+            <th>Frames</th>
+            <th>FPS</th>
+            <th>total (ms)</th>
+            <th>wait (ms)</th>
+            <th>infer (ms)</th>
+            <th>batch</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>
     </div>`;
 }
 
