@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import threading
 
 import numpy as np
@@ -90,6 +91,10 @@ class FrameProcessor:
 
             if infer and active_client is not None and active_transport is not None:
                 try:
+                    if self.camera.mode == "mock":
+                        max_delay_ms = self.camera.mock_delay_ms()
+                        if max_delay_ms > 0:
+                            self._stop.wait(random.uniform(0.0, max_delay_ms) / 1000.0)
                     self._request_seq += 1
                     request_id = f"{CLIENT_NAME}-{self._request_seq:06d}"
                     detections, timings = active_client.send(

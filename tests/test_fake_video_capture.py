@@ -83,6 +83,20 @@ def test_camera_handle_set_mode_rejects_unknown():
         raise AssertionError("expected ValueError for unknown mode")
 
 
+def test_camera_handle_mock_delay_is_clamped():
+    pytest.importorskip("fastapi")
+    from inference_streaming_benchmark.client.state import CameraHandle
+
+    handle = CameraHandle(initial_mode="mock")
+    assert handle.mock_delay_ms() == 100.0
+
+    handle.set_mock_delay_ms(-10)
+    assert handle.mock_delay_ms() == 0.0
+
+    handle.set_mock_delay_ms(6000)
+    assert handle.mock_delay_ms() == 5000.0
+
+
 class _StubCap:
     def __init__(self, tag):
         self.tag = tag

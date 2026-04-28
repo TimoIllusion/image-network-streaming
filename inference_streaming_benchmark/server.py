@@ -107,6 +107,7 @@ class ClientControlBody(BaseModel):
     backend: str | None = None
     inference: bool | None = None
     mock_camera: bool | None = None
+    mock_delay_ms: float | None = None
 
 
 class BatchingBody(BaseModel):

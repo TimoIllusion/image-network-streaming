@@ -5,7 +5,7 @@ import threading
 
 import cv2
 
-from inference_streaming_benchmark.config import CONTROL_HOST
+from inference_streaming_benchmark.config import CONTROL_HOST, MOCK_DELAY_MAX_MS, MOCK_DELAY_MS
 from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.transports import registry
 from inference_streaming_benchmark.transports.base import Transport
@@ -38,6 +38,7 @@ class CameraHandle:
     def __init__(self, initial_mode: str | None = None):
         self.cap: cv2.VideoCapture | None = None
         self.mode = initial_mode if initial_mode is not None else initial_mode_from_env()
+        self._mock_delay_ms = self._clamp_mock_delay(MOCK_DELAY_MS)
         self._lock = threading.Lock()
 
     def ensure(self) -> cv2.VideoCapture:
@@ -60,6 +61,19 @@ class CameraHandle:
                 self.cap = None
             self.mode = mode
         logger.info(f"camera mode set: {mode}")
+
+    @staticmethod
+    def _clamp_mock_delay(value: float) -> float:
+        return min(MOCK_DELAY_MAX_MS, max(0.0, float(value)))
+
+    def set_mock_delay_ms(self, value: float) -> None:
+        with self._lock:
+            self._mock_delay_ms = self._clamp_mock_delay(value)
+        logger.info(f"mock camera inference delay max set: {self._mock_delay_ms:.1f}ms")
+
+    def mock_delay_ms(self) -> float:
+        with self._lock:
+            return self._mock_delay_ms
 
 
 class TransportSession:

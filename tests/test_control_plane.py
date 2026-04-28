@@ -201,7 +201,12 @@ def test_client_control_proxies_to_client_url():
     def _fake_post(url, json=None, timeout=None):
         sent["url"] = url
         sent["json"] = json
-        return _FakeResponse({"ok": True, "backend": json.get("backend"), "mock_camera": json.get("mock_camera")})
+        return _FakeResponse({
+            "ok": True,
+            "backend": json.get("backend"),
+            "mock_camera": json.get("mock_camera"),
+            "mock_delay_ms": json.get("mock_delay_ms"),
+        })
 
     with TestClient(build_control_app(_FakeServer(), reg)) as client:
         with patch("inference_streaming_benchmark.server.requests.post", side_effect=_fake_post):
@@ -212,6 +217,14 @@ def test_client_control_proxies_to_client_url():
     assert sent["url"] == "http://10.0.0.5:8501/api/control"
     # Optional fields with None must be stripped before forwarding.
     assert sent["json"] == {"mock_camera": True}
+
+    with TestClient(build_control_app(_FakeServer(), reg)) as client:
+        with patch("inference_streaming_benchmark.server.requests.post", side_effect=_fake_post):
+            r = client.post("/clients/rpi-1/control", json={"mock_delay_ms": 750})
+            assert r.status_code == 200
+            assert r.json()["mock_delay_ms"] == 750
+
+    assert sent["json"] == {"mock_delay_ms": 750}
 
 
 def test_client_control_unknown_client_returns_404():
@@ -278,9 +291,9 @@ def test_clients_control_all_strips_none_and_rejects_empty_body():
 
     with TestClient(build_control_app(_FakeServer(), reg)) as client:
         with patch("inference_streaming_benchmark.server.requests.post", side_effect=_fake_post):
-            r = client.post("/clients/control-all", json={"mock_camera": True})
+            r = client.post("/clients/control-all", json={"mock_delay_ms": 250})
             assert r.status_code == 200
-            assert sent["json"] == {"mock_camera": True}
+            assert sent["json"] == {"mock_delay_ms": 250}
 
             r = client.post("/clients/control-all", json={})
             assert r.status_code == 400

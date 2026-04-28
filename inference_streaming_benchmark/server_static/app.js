@@ -5,6 +5,8 @@ const backendSelect = document.getElementById("backend");
 const switchAllBtn = document.getElementById("switchAll");
 const mockAllBtn = document.getElementById("mockAll");
 const inferAllBtn = document.getElementById("inferAll");
+const mockDelayAllInput = document.getElementById("mockDelayAll");
+const mockDelayApplyBtn = document.getElementById("mockDelayApply");
 const clearAllBtn = document.getElementById("clearAll");
 const copyMdBtn = document.getElementById("copyMd");
 const downloadCsvBtn = document.getElementById("downloadCsv");
@@ -75,6 +77,13 @@ function updateBulkButtons(payload = lastClientsPayload) {
   inferAllBtn.classList.toggle("primary", !allInfer);
   mockAllBtn.disabled = !hasClients;
   inferAllBtn.disabled = !hasClients;
+  mockDelayApplyBtn.disabled = !hasClients;
+}
+
+function clampMockDelay(value) {
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return 100;
+  return Math.min(5000, Math.max(0, parsed));
 }
 
 // Track which fields the user has touched, so periodic refresh doesn't clobber in-progress edits.
@@ -276,6 +285,7 @@ function renderClientCard(c) {
   const ageClass = c.age_s < 5 ? "age-fresh" : "age-stale";
   const mockChecked = effectiveValue(c.name, "mock_camera", !!s.mock_camera) ? "checked" : "";
   const inferChecked = effectiveValue(c.name, "inference", !!s.inference) ? "checked" : "";
+  const mockDelay = effectiveValue(c.name, "mock_delay_ms", s.mock_delay_ms ?? 100);
   const benchRows = s.bench_rows || [];
 
   return `
@@ -294,6 +304,19 @@ function renderClientCard(c) {
           <label class="control-pill">
             <input type="checkbox" data-action="inference" data-name="${escapeHtml(c.name)}" ${inferChecked} />
             <span>inference</span>
+          </label>
+          <label class="control-pill">
+            <span>delay</span>
+            <input
+              type="number"
+              data-action="mock_delay_ms"
+              data-name="${escapeHtml(c.name)}"
+              min="0"
+              max="5000"
+              step="10"
+              value="${escapeHtml(mockDelay)}"
+              style="width: 4.7rem; padding: 0.1rem 0.25rem;"
+            />
           </label>
           <button class="ghost-btn" data-clear="${escapeHtml(c.name)}">Clear</button>
         </div>
@@ -460,9 +483,11 @@ clientsDiv.addEventListener("change", (ev) => {
   const action = el.dataset.action;
   const name = el.dataset.name;
   if (!action || !name) return;
-  pendingChanges[pendingKey(name, action)] = { value: el.checked, expiresAt: Date.now() + PENDING_TTL_MS };
-  const body = { [action]: el.checked };
-  if (action === "inference" && el.checked && activeTransport) {
+  const value = action === "mock_delay_ms" ? clampMockDelay(el.value) : el.checked;
+  if (action === "mock_delay_ms") el.value = value;
+  pendingChanges[pendingKey(name, action)] = { value, expiresAt: Date.now() + PENDING_TTL_MS };
+  const body = { [action]: value };
+  if (action === "inference" && value && activeTransport) {
     body.backend = activeTransport;
   }
   postClientControl(name, body);
@@ -531,6 +556,19 @@ inferAllBtn.addEventListener("click", async () => {
       body,
       nextValue ? `starting inference on ${backend}…` : "stopping inference on all clients…",
     );
+  } finally {
+    updateBulkButtons();
+  }
+});
+
+mockDelayApplyBtn.addEventListener("click", async () => {
+  const delay = clampMockDelay(mockDelayAllInput.value);
+  mockDelayAllInput.value = delay;
+  mockDelayApplyBtn.disabled = true;
+  markAllPending("mock_delay_ms", delay);
+  renderClients(lastClientsPayload || { clients: [] });
+  try {
+    await postAllClientControl({ mock_delay_ms: delay }, `setting mock delay max to ${delay}ms…`);
   } finally {
     updateBulkButtons();
   }

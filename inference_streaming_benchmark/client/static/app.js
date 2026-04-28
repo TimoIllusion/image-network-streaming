@@ -4,6 +4,7 @@ const STATS_POLL_MS = 1000;
 const backendSelect = document.getElementById("backend");
 const inferCheckbox = document.getElementById("infer");
 const mockCamCheckbox = document.getElementById("mockCam");
+const mockDelayInput = document.getElementById("mockDelay");
 const clearButton = document.getElementById("clear");
 const copyMdButton = document.getElementById("copyMd");
 const statsDiv = document.getElementById("stats");
@@ -62,6 +63,7 @@ async function loadInitialState() {
     if (clientNameSpan && s.name) clientNameSpan.textContent = s.name;
     inferCheckbox.checked = !!s.inference;
     mockCamCheckbox.checked = !!s.mock_camera;
+    mockDelayInput.value = s.mock_delay_ms ?? 100;
   } catch (e) {
     /* fall through to defaults */
   }
@@ -100,6 +102,9 @@ inferCheckbox.addEventListener("change", () =>
 );
 mockCamCheckbox.addEventListener("change", () =>
   postControl({ mock_camera: mockCamCheckbox.checked })
+);
+mockDelayInput.addEventListener("change", () =>
+  postControl({ mock_delay_ms: parseFloat(mockDelayInput.value) })
 );
 clearButton.addEventListener("click", async () => {
   await fetch("/api/clear", { method: "POST" });

@@ -35,6 +35,7 @@ def _build_heartbeat_stats() -> dict:
     return {
         "inference": infer,
         "mock_camera": camera.mode == "mock",
+        "mock_delay_ms": camera.mock_delay_ms(),
         **collector.snapshot_for_heartbeat(active_transport),
     }
 
@@ -87,6 +88,7 @@ def api_state():
         "backend": active_transport,
         "inference": infer,
         "mock_camera": camera.mode == "mock",
+        "mock_delay_ms": camera.mock_delay_ms(),
     }
 
 
@@ -94,6 +96,7 @@ class ControlBody(BaseModel):
     backend: str | None = None
     inference: bool | None = None
     mock_camera: bool | None = None
+    mock_delay_ms: float | None = None
 
 
 def _apply_backend(backend: str | None, inference: bool | None) -> None:
@@ -137,6 +140,8 @@ def _apply_inference_only(inference: bool) -> None:
 def api_control(body: ControlBody):
     if body.mock_camera is not None:
         camera.set_mode("mock" if body.mock_camera else "real")
+    if body.mock_delay_ms is not None:
+        camera.set_mock_delay_ms(body.mock_delay_ms)
 
     if body.backend is not None:
         _apply_backend(body.backend, body.inference)
@@ -148,6 +153,7 @@ def api_control(body: ControlBody):
         "backend": session.active_transport,
         "inference": session.infer,
         "mock_camera": camera.mode == "mock",
+        "mock_delay_ms": camera.mock_delay_ms(),
     }
 
 
