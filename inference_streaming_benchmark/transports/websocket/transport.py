@@ -10,6 +10,7 @@ from websockets.sync.client import ClientConnection
 from websockets.sync.client import connect as ws_connect
 from websockets.sync.server import serve as ws_serve
 
+from inference_streaming_benchmark.config import TRANSPORT_DEFAULT_PORTS
 from inference_streaming_benchmark.logging import logger
 
 from ..base import CLIENT_RESPONSE_TIMEOUT_S, Handler, InferenceRequest, Transport
@@ -20,7 +21,7 @@ from ..envelope import build, unpack
 class WebSocketTransport(Transport):
     name = "websocket"
     display_name = "WebSocket (sync)"
-    default_port = 8009
+    default_port = TRANSPORT_DEFAULT_PORTS[name]
     RAW = False
 
     def __init__(self):

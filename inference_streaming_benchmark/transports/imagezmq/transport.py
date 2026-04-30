@@ -7,6 +7,7 @@ import time
 import imagezmq
 import numpy as np
 
+from inference_streaming_benchmark.config import TRANSPORT_DEFAULT_PORTS
 from inference_streaming_benchmark.logging import logger
 
 from ..base import CLIENT_RESPONSE_TIMEOUT_S, Handler, InferenceRequest, Transport
@@ -16,7 +17,7 @@ from ..envelope import build, unpack
 class ImageZMQTransport(Transport):
     name = "imagezmq"
     display_name = "ImageZMQ (raw ndarray)"
-    default_port = 5556
+    default_port = TRANSPORT_DEFAULT_PORTS[name]
 
     def __init__(self):
         # server state

@@ -152,6 +152,7 @@ Each run applies the batching config, switches all active clients to the selecte
 | `INFSB_BATCH_WAIT_MS` | `10`                 | Max time the batcher waits to fill a batch  |
 | `INFSB_INFER_MODE`    | `single`             | Inference mode: `single`, `unsafe-multi`, or `multi-instance` |
 | `INFSB_INFER_INSTANCES` | `2`                | YOLO instance count used by `multi-instance` mode |
+| `INFSB_TRANSPORT_PORT_<NAME>` | transport default | Override a transport listener port, e.g. `INFSB_TRANSPORT_PORT_HTTP_MULTIPART=18008` |
 
 ### Adding a new transport
 

@@ -6,6 +6,7 @@ from concurrent import futures
 import grpc
 import numpy as np
 
+from inference_streaming_benchmark.config import TRANSPORT_DEFAULT_PORTS
 from inference_streaming_benchmark.logging import logger
 
 from ..base import CLIENT_RESPONSE_TIMEOUT_S, Handler, InferenceRequest, Transport
@@ -88,7 +89,7 @@ class _Servicer(AiDetectionServiceServicer):
 class GRPCTransport(Transport):
     name = "grpc"
     display_name = "gRPC unary (raw ndarray)"
-    default_port = 50051
+    default_port = TRANSPORT_DEFAULT_PORTS[name]
 
     def __init__(self):
         # server state

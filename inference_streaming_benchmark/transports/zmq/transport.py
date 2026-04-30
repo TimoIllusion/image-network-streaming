@@ -7,6 +7,7 @@ import time
 import numpy as np
 import zmq
 
+from inference_streaming_benchmark.config import TRANSPORT_DEFAULT_PORTS
 from inference_streaming_benchmark.logging import logger
 
 from ..base import CLIENT_RESPONSE_TIMEOUT_S, Handler, InferenceRequest, Transport
@@ -17,7 +18,7 @@ from ..envelope import build, unpack
 class ZMQTransport(Transport):
     name = "zmq"
     display_name = "ZeroMQ REQ/REP (JPEG)"
-    default_port = 5555
+    default_port = TRANSPORT_DEFAULT_PORTS[name]
     RAW = False
 
     def __init__(self):

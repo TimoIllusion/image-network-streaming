@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
+from inference_streaming_benchmark.config import TRANSPORT_DEFAULT_PORTS
 from inference_streaming_benchmark.logging import logger
 
 from .._fastapi_base import FastAPITransport
@@ -20,7 +21,7 @@ from ..envelope import build, unpack
 class HTTPMultipartTransport(FastAPITransport):
     name = "http_multipart"
     display_name = "HTTP multipart (FastAPI)"
-    default_port = 8008
+    default_port = TRANSPORT_DEFAULT_PORTS[name]
     RAW = False
 
     def __init__(self):
