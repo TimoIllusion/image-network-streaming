@@ -88,6 +88,23 @@ One AI server process hosts every transport; **exactly one transport is active a
 
 **Ruff config:** line length 128, rules E/F/I/B/UP; excludes `.venv/`, `Ultralytics/`, and generated `*_pb2*.py` / `.pyi` files. Per-file ignores: E402 in tests, B008 in `transports/http_multipart/transport.py` (FastAPI `File(...)` default).
 
+## Commit Tags (Versioning)
+
+Every push to `main` triggers `.github/workflows/auto-tag.yml`, which bumps the version tag based on a marker in the commit message. The package version is derived from git tags via `setuptools_scm` — tags are the single source of truth.
+
+**Every commit MUST include exactly one tag.** The agent selects it based on what changed:
+
+- `#none` — no runtime behavior change. Docs, README, comments, AGENTS.md/CLAUDE.md, beads metadata, formatting-only diffs, CI tweaks that don't affect the package, screenshot updates.
+- `#patch` — bug fix or small refactor that changes runtime behavior without adding capability.
+- `#minor` — new feature or user-visible capability (new transport, new CLI flag, new metric, new UI surface).
+- `#major` — breaking change. Rare; confirm with the user before using.
+
+**Rules:**
+- Never commit without a tag. The default would be `#patch`, which produces noisy release tags for trivial changes.
+- When unsure between two tiers, pick the lower one (`#none` over `#patch`, `#patch` over `#minor`).
+- Place the tag at the end of the subject line: `Add foo bar #minor`.
+- Tag the actual content: a one-line README fix is `#none` even if it ships alongside larger work in a different PR.
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
