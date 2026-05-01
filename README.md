@@ -2,6 +2,10 @@
 
 Comparison implementation for image transmission and inference response using an AI inference server with multiple communication systems: HTTP multipart (FastAPI), ZeroMQ (ZMQ), ImageZMQ, grpc.
 
+![Inference streaming benchmark sweep and aggregation UI](docs/assets/ui-sweep-aggregation-preview.jpg)
+
+The central operator UI can sweep transport and batching configurations, aggregate benchmark results, and compare per-client performance across active backends.
+
 Results for 1920×1080 images on a MacBook Pro M2 Pro (YOLOv8n, MPS inference).
 
 The columns are ordered so the math reads left-to-right:
