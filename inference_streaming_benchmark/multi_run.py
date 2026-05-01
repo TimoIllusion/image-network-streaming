@@ -55,9 +55,7 @@ def build_plan(
                 if "on" in batch_modes:
                     for size in batch_sizes:
                         for wait_ms in batch_waits_ms:
-                            plan.append(
-                                SweepConfig(transport, True, size, wait_ms, inference_mode, instance_count)
-                            )
+                            plan.append(SweepConfig(transport, True, size, wait_ms, inference_mode, instance_count))
     return plan
 
 

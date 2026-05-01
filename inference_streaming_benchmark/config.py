@@ -33,10 +33,7 @@ def _transport_port(name: str, default: int) -> int:
     return int(os.getenv(_transport_port_env_name(name), str(default)))
 
 
-TRANSPORT_DEFAULT_PORTS = {
-    name: _transport_port(name, default)
-    for name, default in _TRANSPORT_DEFAULT_PORTS.items()
-}
+TRANSPORT_DEFAULT_PORTS = {name: _transport_port(name, default) for name, default in _TRANSPORT_DEFAULT_PORTS.items()}
 
 # Dynamic batching defaults (server-side). Runtime-tunable via the central UI.
 BATCH_ENABLED = os.getenv("INFSB_BATCH_ENABLED", "0") == "1"
