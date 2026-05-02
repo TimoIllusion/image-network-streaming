@@ -210,7 +210,7 @@ For squash-merged PRs, putting the keyword in the PR title or description works,
 
 ## Common Issues
 
-- camera not working and throwing errors -> close all open instances of streamlit in browser except one and reload it
+- Camera not working and throwing errors → close all other browser tabs pointing at `http://127.0.0.1:8501/` (the per-device client UI) and reload the remaining one. Only one tab can hold the webcam at a time.
 
 ## Work Tracking
 
