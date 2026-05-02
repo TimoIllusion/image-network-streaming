@@ -1,0 +1,12 @@
+prune .beads
+prune .claude
+prune .dolt
+prune .github
+prune .vscode
+prune docs
+prune tests
+exclude .dockerignore
+exclude .gitignore
+exclude .pre-commit-config.yaml
+exclude AGENTS.md
+exclude CLAUDE.md
