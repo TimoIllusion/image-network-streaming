@@ -1,6 +1,9 @@
 .git
 .github
 .vscode
+.claude/
+.beads/
+.dolt/
 
 .venv
 venv
@@ -19,8 +22,12 @@ logs/
 build/
 dist/
 *.egg-info/
+*.db
 
 Ultralytics/
 *.pt
 result.png
+
+tests/
+docs/
 

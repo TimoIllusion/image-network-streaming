@@ -8,12 +8,12 @@ dynamic = ["version"]
 description = "A test for image transmission via multiple communication systems: FastAPI, ZeroMQ (ZMQ), ImageZMQ, grpc."
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
 authors = [
   { name = "Timo Leitritz", email = "42964574+TimoIllusion@users.noreply.github.com" },
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -36,7 +36,6 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
-  "flake8>=6,<8",
   "numpy>=1.24,<3",
   "opencv-python-headless>=4.8,<5",
   "pillow>=10,<12",
