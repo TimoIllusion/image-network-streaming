@@ -88,6 +88,10 @@ One AI server process hosts every transport; **exactly one transport is active a
 
 **Ruff config:** line length 128, rules E/F/I/B/UP; excludes `.venv/`, `Ultralytics/`, and generated `*_pb2*.py` / `.pyi` files. Per-file ignores: E402 in tests, B008 in `transports/http_multipart/transport.py` (FastAPI `File(...)` default).
 
+## Implementation Policy
+
+- Only implement backwards compatibility after explicit confirmation from the user (ask first).
+
 ## Commit Tags (Versioning)
 
 Every push to `main` triggers `.github/workflows/auto-tag.yml`, which bumps the version tag based on a marker in the commit message. The package version is derived from git tags via `setuptools_scm` — tags are the single source of truth.
