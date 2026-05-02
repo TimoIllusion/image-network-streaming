@@ -9,6 +9,9 @@ yolov8n.pt
 result.png
 Ultralytics/
 
+# Scratch space for intermediate files (specs, drafts, scratch notes)
+temp/
+
 .idea/
 .vscode/
 
