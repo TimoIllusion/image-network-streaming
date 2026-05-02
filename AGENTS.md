@@ -130,6 +130,20 @@ Every push to `main` triggers `.github/workflows/auto-tag.yml`, which bumps the 
 
 **Merge strategy:** squash and merge only. Reference beads issues as `bd-XXX` (not `#XXX`, which GitHub auto-links to PR/issue numbers).
 
+**Agent workflow:** When a feature branch is ready, the agent MUST draft the PR title and body in the formats above, **show them to the user for confirmation**, and only then open the PR via `gh pr create`. Use a heredoc for the body so the `**Why:** / **What:** / **Test:**` template renders verbatim. Report the PR URL back to the user. If `gh` is unavailable, fall back to printing the exact title and body the user should paste, plus the GitHub "compare" URL.
+
+```bash
+gh pr create --title "Add websocket transport #minor" --body "$(cat <<'EOF'
+**Why:** add a streaming transport for low-latency frame delivery (bd-XXX).
+**What:**
+- new transport class
+- registry wiring
+- integration test
+**Test:** `uv run ruff check .` + `uv run pytest -q` (all pass).
+EOF
+)"
+```
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
