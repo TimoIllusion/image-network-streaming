@@ -105,6 +105,27 @@ Every push to `main` triggers `.github/workflows/auto-tag.yml`, which bumps the 
 - Place the tag at the end of the subject line: `Add foo bar #minor`.
 - Tag the actual content: a one-line README fix is `#none` even if it ships alongside larger work in a different PR.
 
+## Branch & PR Conventions
+
+**Workflow:** GitHub Flow. Branch off `main`, open a PR, squash-merge back. `main` stays deployable at all times.
+
+**Branch names:** `<type>/<short-kebab-description>`, lowercase, ≤50 chars. Types: `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`, `test/`, `ci/`, `hotfix/`. Example: `feat/grpc-streaming`.
+
+**Commit subject:** plain imperative, sentence case, no trailing period, ≤72 chars including the `#tag` (see [Commit Tags](#commit-tags-versioning)). Example: `Add websocket transport #minor`.
+
+**Commit body** (optional): blank line after subject, wrap at 72 chars, explain *why* not *what*. One commit = one logical change.
+
+**PR title:** same rules as commit subject, including the `#tag` — squash-merge uses the PR title as the commit on `main`, and `auto-tag.yml` reads the tag from it.
+
+**PR description:**
+```
+**Why:** <motivation; link bd-XXX if applicable>
+**What:** <bullet list of changes>
+**Test:** <commands run, e.g. "ruff + pytest pass">
+```
+
+**Merge strategy:** squash and merge only. Reference beads issues as `bd-XXX` (not `#XXX`, which GitHub auto-links to PR/issue numbers).
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
