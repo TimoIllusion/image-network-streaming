@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import argparse
 
+from inference_streaming_benchmark.logging import setup_logging
 from inference_streaming_benchmark.server import run
 from inference_streaming_benchmark.transports import registry
 
 
 def main() -> None:
+    setup_logging()
     p = argparse.ArgumentParser()
     choices = sorted(registry.all_transports())
     p.add_argument(

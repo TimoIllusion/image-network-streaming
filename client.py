@@ -86,9 +86,14 @@ def main() -> None:
     os.environ["INFSB_UI_PORT"] = str(port)
     os.environ["INFSB_CLIENT_NAME"] = name
 
+    from inference_streaming_benchmark.config import CONTROL_BIND  # noqa: E402, deferred import
+    from inference_streaming_benchmark.logging import setup_logging  # noqa: E402, deferred import
+
+    setup_logging()
+
     from inference_streaming_benchmark.client.app import app  # noqa: E402, deferred import
 
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host=CONTROL_BIND, port=port)
 
 
 if __name__ == "__main__":

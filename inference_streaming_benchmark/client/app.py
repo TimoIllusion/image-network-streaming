@@ -9,7 +9,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from inference_streaming_benchmark.config import CLIENT_NAME, CONTROL_BASE, CONTROL_HOST, UI_PORT
+from inference_streaming_benchmark.auth import install_bearer_auth
+from inference_streaming_benchmark.config import CLIENT_NAME, CONTROL_BASE, CONTROL_HOST, CONTROL_TOKEN, UI_PORT
 from inference_streaming_benchmark.transports import registry
 
 # importing the transports package above triggers every transport's registration.
@@ -111,6 +112,7 @@ def build_client_app(
             processor.stop()
 
     app = FastAPI(lifespan=lifespan)
+    install_bearer_auth(app, CONTROL_TOKEN)
     app.state.camera = camera
     app.state.session = session
     app.state.collector = collector

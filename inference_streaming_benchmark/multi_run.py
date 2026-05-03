@@ -10,7 +10,14 @@ from typing import Any
 
 import requests
 
-from inference_streaming_benchmark.config import CONTROL_BASE, CONTROL_TIMEOUT_S
+from inference_streaming_benchmark.auth import outbound_headers
+from inference_streaming_benchmark.config import CONTROL_BASE, CONTROL_TIMEOUT_S, CONTROL_TOKEN
+
+
+def _build_session() -> requests.Session:
+    session = requests.Session()
+    session.headers.update(outbound_headers(CONTROL_TOKEN))
+    return session
 
 
 @dataclass(frozen=True)
@@ -76,7 +83,7 @@ def run_sweep(
     on_run_complete: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     owns_session = session is None
-    session = session or requests.Session()
+    session = session or _build_session()
     runs = []
     try:
         for idx, config in enumerate(plan, start=1):
@@ -164,7 +171,7 @@ def main() -> None:
     if bad_modes:
         raise SystemExit(f"unknown batch mode(s): {', '.join(bad_modes)}")
 
-    with requests.Session() as session:
+    with _build_session() as session:
         transports = (
             parse_csv_strings(args.transports) if args.transports else fetch_transport_names(session, args.control_base)
         )
