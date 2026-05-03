@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from inference_streaming_benchmark.auth import install_bearer_auth, outbound_headers
 from inference_streaming_benchmark.batcher import Batcher
 from inference_streaming_benchmark.client_registry import ClientRegistry
 from inference_streaming_benchmark.config import (
@@ -25,6 +26,7 @@ from inference_streaming_benchmark.config import (
     BATCH_WAIT_MS,
     CONTROL_BIND,
     CONTROL_PORT,
+    CONTROL_TOKEN,
     INFER_INSTANCES,
     INFER_MODE,
 )
@@ -231,12 +233,14 @@ def _cascade_to_clients(client_registry: ClientRegistry, transport_name: str) ->
     Best-effort: failures are logged, never raised — one offline client should not
     block the operator's switch.
     """
+    headers = outbound_headers(CONTROL_TOKEN)
     for record in client_registry.list_active():
         wants_inference = bool(record.stats.get("inference", True))
         try:
             requests.post(
                 f"{record.ui_url}/api/control",
                 json={"backend": transport_name, "inference": wants_inference},
+                headers=headers,
                 timeout=PROXY_TIMEOUT_S,
             ).raise_for_status()
             logger.info(f"cascaded transport={transport_name} to client {record.name}")
@@ -260,6 +264,7 @@ def build_control_app(
         server.stop()
 
     app = FastAPI(lifespan=lifespan)
+    install_bearer_auth(app, CONTROL_TOKEN)
 
     if SERVER_STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=SERVER_STATIC_DIR), name="server-static")
@@ -333,7 +338,12 @@ def build_control_app(
         if not payload:
             raise HTTPException(status_code=400, detail="control body is empty")
         try:
-            r = requests.post(f"{record.ui_url}/api/control", json=payload, timeout=PROXY_TIMEOUT_S)
+            r = requests.post(
+                f"{record.ui_url}/api/control",
+                json=payload,
+                headers=outbound_headers(CONTROL_TOKEN),
+                timeout=PROXY_TIMEOUT_S,
+            )
             r.raise_for_status()
         except requests.RequestException as e:
             raise HTTPException(status_code=502, detail=f"client {name} unreachable: {e}") from e
@@ -357,9 +367,16 @@ def build_control_app(
         records = client_registry.list_active()
         results = {}
 
+        headers = outbound_headers(CONTROL_TOKEN)
+
         def post_control(record):
             try:
-                r = requests.post(f"{record.ui_url}/api/control", json=payload, timeout=PROXY_TIMEOUT_S)
+                r = requests.post(
+                    f"{record.ui_url}/api/control",
+                    json=payload,
+                    headers=headers,
+                    timeout=PROXY_TIMEOUT_S,
+                )
                 r.raise_for_status()
                 return record.name, "ok"
             except requests.RequestException as e:
@@ -381,7 +398,11 @@ def build_control_app(
         if record is None:
             raise HTTPException(status_code=404, detail=f"unknown client: {name}")
         try:
-            r = requests.post(f"{record.ui_url}/api/clear", timeout=PROXY_TIMEOUT_S)
+            r = requests.post(
+                f"{record.ui_url}/api/clear",
+                headers=outbound_headers(CONTROL_TOKEN),
+                timeout=PROXY_TIMEOUT_S,
+            )
             r.raise_for_status()
         except requests.RequestException as e:
             raise HTTPException(status_code=502, detail=f"client {name} unreachable: {e}") from e
@@ -460,10 +481,15 @@ def build_control_app(
 
     @app.post("/clients/clear-all")
     def clients_clear_all():
+        headers = outbound_headers(CONTROL_TOKEN)
         results = {}
         for record in client_registry.list_active():
             try:
-                r = requests.post(f"{record.ui_url}/api/clear", timeout=PROXY_TIMEOUT_S)
+                r = requests.post(
+                    f"{record.ui_url}/api/clear",
+                    headers=headers,
+                    timeout=PROXY_TIMEOUT_S,
+                )
                 r.raise_for_status()
                 results[record.name] = "ok"
             except requests.RequestException as e:

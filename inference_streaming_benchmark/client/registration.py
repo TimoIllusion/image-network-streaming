@@ -6,7 +6,8 @@ from collections.abc import Callable
 
 import requests
 
-from inference_streaming_benchmark.config import CONTROL_TIMEOUT_S
+from inference_streaming_benchmark.auth import outbound_headers
+from inference_streaming_benchmark.config import CONTROL_TIMEOUT_S, CONTROL_TOKEN
 from inference_streaming_benchmark.logging import logger
 
 HEARTBEAT_INTERVAL_S = 1.0
@@ -72,10 +73,12 @@ class Registrar:
         registered = False
         while not self._stop.is_set():
             try:
+                headers = outbound_headers(CONTROL_TOKEN)
                 if not registered:
                     requests.post(
                         f"{self.control_base}/register",
                         json={"name": self.name, "ui_url": self.ui_url, "version": self.version},
+                        headers=headers,
                         timeout=CONTROL_TIMEOUT_S,
                     ).raise_for_status()
                     logger.info(f"registered with server as {self.name!r} ({self.ui_url})")
@@ -83,6 +86,7 @@ class Registrar:
                 requests.post(
                     f"{self.control_base}/heartbeat",
                     json={"name": self.name, "stats": self.stats_provider()},
+                    headers=headers,
                     timeout=CONTROL_TIMEOUT_S,
                 ).raise_for_status()
             except requests.HTTPError as e:

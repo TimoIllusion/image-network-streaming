@@ -219,9 +219,10 @@ def test_client_control_proxies_to_client_url():
         def json(self):
             return self._body
 
-    def _fake_post(url, json=None, timeout=None):
+    def _fake_post(url, json=None, timeout=None, headers=None):
         sent["url"] = url
         sent["json"] = json
+        sent["headers"] = headers
         return _FakeResponse(
             {
                 "ok": True,
@@ -345,7 +346,7 @@ def test_switch_with_cascade_calls_each_client():
         def json(self):
             return {}
 
-    def _fake_post(url, json=None, timeout=None):
+    def _fake_post(url, json=None, timeout=None, headers=None):
         posted.append((url, json))
         return _Resp()
 
