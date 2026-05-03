@@ -99,6 +99,23 @@ Clients auto-register with the server on startup and send a heartbeat every seco
 
 **No webcam attached?** Set `MOCK_CAMERA=1` to start with synthetic frames (a static DALL-E image, looped at 30fps), or toggle the **Mock camera** switch in the per-device UI / central UI at runtime — no restart needed.
 
+### Network exposure
+
+This is a **benchmark tool for trusted LANs**. By default, the control plane (`:9000`) and per-device UI (`:8501`) bind `0.0.0.0` and run **without authentication** — the multi-device flow is the whole point of the project, so locking it down by default would only get in the way. The control plane holds no user data, no credentials, and no production traffic; the worst-case impact of unauthenticated access from the LAN is "someone else can disrupt your benchmark run."
+
+Two opt-in escape hatches are available for hostile networks or CI:
+
+- `INFSB_BIND=127.0.0.1` — restrict the control plane and per-device UI listeners to loopback. Set on the host you want to lock down. Transport sockets (HTTP multipart, ZMQ, gRPC, WebSocket, ImageZMQ) keep binding `0.0.0.0` since the multi-device benchmark depends on it.
+- `INFSB_TOKEN=<random>` — require `Authorization: Bearer <token>` on every non-loopback request to the control plane and per-device UI. Loopback always passes through, so local `curl`/dev workflows stay simple. Outbound calls (server → client, client → server, sweep CLI) read the same env var and send the header automatically — set the same value on **every** machine.
+
+Generate a token with:
+
+```bash
+python -c 'import secrets; print(secrets.token_urlsafe(32))'
+```
+
+> The token is for accident prevention, not for defending against motivated adversaries: there is no TLS, no per-client auth, no rate limiting. If you need real security, run the cluster behind a VPN or SSH tunnel.
+
 **Per-transport multi-client behavior** (Option 1: each transport keeps its natural semantics):
 - HTTP multipart, gRPC, WebSocket — fan in concurrently at the network layer; serialize at inference (one shared YOLO instance).
 - ZMQ REQ/REP, ImageZMQ — strictly 1:1 by design. With N clients connected, the server processes one client at a time and the others queue. The central UI surfaces this clearly: one client at full FPS, others starved.
@@ -157,6 +174,8 @@ Each run applies the batching config, switches all active clients to the selecte
 | `INFSB_INFER_MODE`    | `single`             | Inference mode: `single`, `unsafe-multi`, or `multi-instance` |
 | `INFSB_INFER_INSTANCES` | `2`                | YOLO instance count used by `multi-instance` mode |
 | `INFSB_TRANSPORT_PORT_<NAME>` | transport default | Override a transport listener port, e.g. `INFSB_TRANSPORT_PORT_HTTP_MULTIPART=18008` |
+| `INFSB_BIND`          | `0.0.0.0`            | Bind host for the control plane + per-device UI. Set to `127.0.0.1` to restrict to loopback. |
+| `INFSB_TOKEN`         | unset                | Shared secret. When set, non-loopback requests must carry `Authorization: Bearer <token>`. |
 
 ### Adding a new transport
 
