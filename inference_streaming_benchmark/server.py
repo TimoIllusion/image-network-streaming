@@ -23,6 +23,7 @@ from inference_streaming_benchmark.config import (
     BATCH_ENABLED,
     BATCH_SIZE,
     BATCH_WAIT_MS,
+    CONTROL_BIND,
     CONTROL_PORT,
     INFER_INSTANCES,
     INFER_MODE,
@@ -481,5 +482,5 @@ def run(default: str | None = "http_multipart") -> None:
 
     app = build_control_app(server)
 
-    logger.info(f"control plane on http://0.0.0.0:{CONTROL_PORT}")
-    uvicorn.run(app, host="0.0.0.0", port=CONTROL_PORT, log_level="warning")
+    logger.info(f"control plane on http://{CONTROL_BIND}:{CONTROL_PORT}")
+    uvicorn.run(app, host=CONTROL_BIND, port=CONTROL_PORT, log_level="warning")

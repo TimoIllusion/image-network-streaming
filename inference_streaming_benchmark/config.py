@@ -8,6 +8,7 @@ CONTROL_PORT = int(os.getenv("INFSB_CONTROL_PORT", "9000"))
 UI_PORT = int(os.getenv("INFSB_UI_PORT", "8501"))
 CONTROL_TIMEOUT_S = float(os.getenv("INFSB_CONTROL_TIMEOUT_S", "5.0"))
 CONTROL_BASE = f"http://{CONTROL_HOST}:{CONTROL_PORT}"
+CONTROL_BIND = os.getenv("INFSB_BIND", "0.0.0.0")
 CLIENT_NAME = os.getenv("INFSB_CLIENT_NAME") or socket.gethostname()
 MOCK_DELAY_MS = float(os.getenv("INFSB_MOCK_DELAY_MS", "100"))
 MOCK_DELAY_MAX_MS = 5000.0
