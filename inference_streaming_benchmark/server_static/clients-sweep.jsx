@@ -122,11 +122,13 @@ const RunForm = ({ transports, sweep }) => {
   const transportNames = transports.length
     ? transports.map((t) => t.name)
     : ["imagezmq", "zmq_raw", "grpc", "websocket_raw", "http_multipart_raw", "http_multipart", "zmq", "websocket"];
+  const defaultTransports = ["http_multipart", "grpc", "websocket"];
+  const defaultSelectedTransports = transportNames.filter((name) => defaultTransports.includes(name)).slice(0, 3);
 
   const [selectedTransports, setSelectedTransports] = React.useState([]);
   const [batchOff, setBatchOff] = React.useState(true);
   const [batchOn, setBatchOn] = React.useState(true);
-  const [batchSizes, setBatchSizes] = React.useState("1,2,4,8");
+  const [batchSizes, setBatchSizes] = React.useState("2,4,8");
   const [batchWaits, setBatchWaits] = React.useState("0,5,10,20");
   const [inferSingle, setInferSingle] = React.useState(true);
   const [inferUnsafe, setInferUnsafe] = React.useState(false);
@@ -142,7 +144,7 @@ const RunForm = ({ transports, sweep }) => {
   React.useEffect(() => {
     setSelectedTransports((prev) => {
       if (prev.length) return prev.filter((name) => transportNames.includes(name));
-      return transportNames;
+      return defaultSelectedTransports.length ? defaultSelectedTransports : transportNames.slice(0, 3);
     });
   }, [transportNames.join("|")]);
 
