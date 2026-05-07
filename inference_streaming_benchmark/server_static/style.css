@@ -461,8 +461,8 @@ html, body {
 
 .client-body {
   display: grid;
-  grid-template-columns: minmax(0, 110px) minmax(0, 110px) minmax(0, 1.3fr) minmax(0, 110px);
-  gap: 14px;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(180px, 1.2fr) minmax(120px, auto);
+  gap: 12px;
   align-items: center;
 }
 .client-card.compact .client-body {
@@ -470,7 +470,7 @@ html, body {
 }
 .client-card.compact .client-metric:nth-child(2) { display: none; }
 
-.client-metric { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.client-metric { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; }
 .client-metric.wide { gap: 5px; }
 .metric-label { letter-spacing: 0.05em; text-transform: uppercase; }
 .metric-value {
@@ -484,12 +484,12 @@ html, body {
 }
 .stage-mini b { color: var(--ink); font-weight: 500; }
 
-.client-side { display: flex; flex-direction: column; gap: 2px; }
+.client-side { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .side-row {
   display: flex; justify-content: space-between;
   font-size: 10.5px; color: var(--ink);
 }
-.client-actions { display: flex; gap: 4px; margin-top: 6px; }
+.client-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; justify-content: flex-end; }
 
 /* ── Run form ─────────────────────────────── */
 .run-form-grid {

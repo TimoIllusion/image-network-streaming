@@ -40,12 +40,12 @@ const ClientCard = ({ client, activeTransport }) => {
         <div className="client-metric">
           <div className="metric-label mono small muted">fps</div>
           <div className="metric-value mono">{fmt(fps, 1)}</div>
-          <Spark data={fpsSeries} width={140} height={22} color="var(--accent)" fill />
+          <Spark data={fpsSeries} width="100%" height={22} color="var(--accent)" fill />
         </div>
         <div className="client-metric">
           <div className="metric-label mono small muted">total ms</div>
           <div className="metric-value mono">{fmt(timing.total, 1)}</div>
-          <Spark data={latSeries} width={140} height={22} color="oklch(0.55 0.14 280)" />
+          <Spark data={latSeries} width="100%" height={22} color="oklch(0.55 0.14 280)" />
         </div>
         <div className="client-metric wide">
           <div className="metric-label mono small muted">latency stages</div>

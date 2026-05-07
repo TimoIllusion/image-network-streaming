@@ -74,7 +74,7 @@ const ClientCard = ({
     className: "metric-value mono"
   }, fmt(fps, 1)), /*#__PURE__*/React.createElement(Spark, {
     data: fpsSeries,
-    width: 140,
+    width: "100%",
     height: 22,
     color: "var(--accent)",
     fill: true
@@ -86,7 +86,7 @@ const ClientCard = ({
     className: "metric-value mono"
   }, fmt(timing.total, 1)), /*#__PURE__*/React.createElement(Spark, {
     data: latSeries,
-    width: 140,
+    width: "100%",
     height: 22,
     color: "oklch(0.55 0.14 280)"
   })), /*#__PURE__*/React.createElement("div", {
