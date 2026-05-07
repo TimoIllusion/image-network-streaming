@@ -71,6 +71,13 @@ const ControlRail = ({
   railStatus
 }) => {
   const list = transports.length ? transports.map(t => t.name) : ["imagezmq", "zmq_raw", "grpc", "websocket_raw", "http_multipart_raw", "http_multipart", "zmq", "websocket"];
+  const startAll = () => {
+    const body = {
+      inference: true
+    };
+    if (activeTransport) body.backend = activeTransport;
+    window.Actions.controlAll(body, "starting all clients...");
+  };
   return /*#__PURE__*/React.createElement("div", {
     className: "rail"
   }, /*#__PURE__*/React.createElement("div", {
@@ -153,6 +160,24 @@ const ControlRail = ({
   }), railStatus && /*#__PURE__*/React.createElement("span", {
     className: "rail-status mono small muted"
   }, railStatus), /*#__PURE__*/React.createElement("button", {
+    className: "btn",
+    onClick: startAll
+  }, "start all"), /*#__PURE__*/React.createElement("button", {
+    className: "btn",
+    onClick: () => window.Actions.controlAll({
+      inference: false
+    }, "pausing all clients...")
+  }, "pause all"), /*#__PURE__*/React.createElement("button", {
+    className: "btn",
+    onClick: () => window.Actions.controlAll({
+      mock_camera: true
+    }, "enabling mock on all clients...")
+  }, "mock all"), /*#__PURE__*/React.createElement("button", {
+    className: "btn ghost",
+    onClick: () => window.Actions.controlAll({
+      mock_camera: false
+    }, "using real cameras on all clients...")
+  }, "real all"), /*#__PURE__*/React.createElement("button", {
     className: "btn ghost",
     onClick: () => window.Actions.clearAll()
   }, "clear stats"), /*#__PURE__*/React.createElement("button", {

@@ -132,6 +132,7 @@ const RunForm = ({ transports, sweep }) => {
   const [inferUnsafe, setInferUnsafe] = React.useState(false);
   const [inferMulti, setInferMulti] = React.useState(false);
   const [inferInstances, setInferInstances] = React.useState("1,2");
+  const [cameraMode, setCameraMode] = React.useState("current");
   const [warmupS, setWarmupS] = React.useState(2);
   const [durationS, setDurationS] = React.useState(10);
   const [submitting, setSubmitting] = React.useState(false);
@@ -163,7 +164,7 @@ const RunForm = ({ transports, sweep }) => {
     if (inferSingle) inferenceModes.push("single");
     if (inferUnsafe) inferenceModes.push("unsafe-multi");
     if (inferMulti) inferenceModes.push("multi-instance");
-    return {
+    const body = {
       transports: selectedTransports,
       batch_modes: batchModes,
       batch_sizes: parseNumberList(batchSizes, (item) => Number.parseInt(item, 10)),
@@ -173,6 +174,9 @@ const RunForm = ({ transports, sweep }) => {
       warmup_s: Number.parseFloat(warmupS),
       duration_s: Number.parseFloat(durationS),
     };
+    if (cameraMode === "mock") body.mock_camera = true;
+    if (cameraMode === "real") body.mock_camera = false;
+    return body;
   };
 
   const onSubmit = async (event) => {
@@ -261,7 +265,25 @@ const RunForm = ({ transports, sweep }) => {
         </fieldset>
 
         <fieldset className="run-fieldset">
-          <legend>timing</legend>
+          <legend>camera + timing</legend>
+          <div className="inline-checks wrap">
+            {[
+              ["current", "current"],
+              ["mock", "mock"],
+              ["real", "real"],
+            ].map(([value, label]) => (
+              <label key={value} className="check-chip">
+                <input
+                  type="radio"
+                  name="sweep-camera"
+                  checked={cameraMode === value}
+                  onChange={() => setCameraMode(value)}
+                  disabled={disabled}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
           <label className="text-input mono small">
             warmup s
             <input type="number" min="0" step="0.1" value={warmupS} onChange={(e) => setWarmupS(e.target.value)} disabled={disabled} />
@@ -336,6 +358,7 @@ const SweepPanel = ({ sweep }) => {
                 <div>b{r.batch.enabled ? r.batch.size : "○"}</div>
                 <div className="muted">w{r.batch.wait}</div>
                 <div className="muted">{r.infer.mode === "single" ? "s" : r.infer.mode === "unsafe-multi" ? "u" : `m×${r.infer.instances}`}</div>
+                <div className="muted">{r.camera === "mock" ? "cam m" : r.camera === "real" ? "cam r" : "cam -"}</div>
               </div>
             ))}
           </div>
@@ -349,7 +372,7 @@ const SweepPanel = ({ sweep }) => {
                 className={`sweep-cell ${c.status}`}
                 style={c.status === "done" ? { background: fpsColor(c.fps) } : {}}
                 title={c.status === "done"
-                  ? `${t} · batch=${c.batch.enabled ? c.batch.size : "off"} · wait=${c.batch.wait}ms · ${c.infer.mode}\n${fmt(c.fps, 1)} fps · ${fmt(c.total_ms, 1)} ms`
+                  ? `${t} · batch=${c.batch.enabled ? c.batch.size : "off"} · wait=${c.batch.wait}ms · ${c.infer.mode} · camera=${c.camera}\n${fmt(c.fps, 1)} fps · ${fmt(c.total_ms, 1)} ms`
                   : c.status}
               >
                 {c.status === "done" && <span className="mono">{fmtInt(c.fps)}</span>}
@@ -367,7 +390,7 @@ const SweepPanel = ({ sweep }) => {
           <span className="legend-gradient" />
           <span>{fmtInt(minF)} → {fmtInt(maxF)}</span>
           <span className="rail-spacer" />
-          <span>b· batch size · w· wait ms · s/u/m· infer mode</span>
+          <span>b· batch size · w· wait ms · s/u/m· infer mode · cam m/r/-</span>
         </div>
       )}
     </div>

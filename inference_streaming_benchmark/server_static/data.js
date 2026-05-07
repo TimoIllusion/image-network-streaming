@@ -213,6 +213,7 @@
           mode: cfg.inference_mode || "single",
           instances: Number(cfg.inference_instances ?? 1),
         },
+        camera: cfg.mock_camera == null ? "current" : cfg.mock_camera ? "mock" : "real",
         status: cellStatus,
         fps: null, total_ms: null, transport_ms: null,
         infer_ms: null, wait_ms: null, batch_size: 1,
@@ -445,6 +446,35 @@
     }
   }
 
+  async function controlAll(body, label) {
+    const clients = Store.state.rawClients || [];
+    for (const rec of clients) {
+      for (const [action, value] of Object.entries(body)) {
+        if (action === "backend") continue;
+        setPending(rec.name, action, value);
+      }
+    }
+    setRailStatus(label || "updating clients...", false);
+    try {
+      const r = await fetch("/clients/control-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        setRailStatus(`clients failed: ${await r.text()}`);
+        return;
+      }
+      const payload = await r.json();
+      const failed = Object.values(payload.results || {}).filter((v) => v !== "ok").length;
+      setRailStatus(failed ? `updated clients; ${failed} failed` : "updated all clients");
+    } catch (e) {
+      setRailStatus(`clients error: ${e}`);
+    } finally {
+      refreshClients();
+    }
+  }
+
   async function clearClient(name) {
     try {
       await fetch(`/clients/${encodeURIComponent(name)}/clear`, { method: "POST" });
@@ -613,6 +643,7 @@
     applyInference,
     startSweep,
     controlClient,
+    controlAll,
     clearClient,
     clearAll,
     copyMd,

@@ -185,6 +185,7 @@ const RunForm = ({
   const [inferUnsafe, setInferUnsafe] = React.useState(false);
   const [inferMulti, setInferMulti] = React.useState(false);
   const [inferInstances, setInferInstances] = React.useState("1,2");
+  const [cameraMode, setCameraMode] = React.useState("current");
   const [warmupS, setWarmupS] = React.useState(2);
   const [durationS, setDurationS] = React.useState(10);
   const [submitting, setSubmitting] = React.useState(false);
@@ -210,7 +211,7 @@ const RunForm = ({
     if (inferSingle) inferenceModes.push("single");
     if (inferUnsafe) inferenceModes.push("unsafe-multi");
     if (inferMulti) inferenceModes.push("multi-instance");
-    return {
+    const body = {
       transports: selectedTransports,
       batch_modes: batchModes,
       batch_sizes: parseNumberList(batchSizes, item => Number.parseInt(item, 10)),
@@ -220,6 +221,9 @@ const RunForm = ({
       warmup_s: Number.parseFloat(warmupS),
       duration_s: Number.parseFloat(durationS)
     };
+    if (cameraMode === "mock") body.mock_camera = true;
+    if (cameraMode === "real") body.mock_camera = false;
+    return body;
   };
   const onSubmit = async event => {
     event.preventDefault();
@@ -331,7 +335,18 @@ const RunForm = ({
     disabled: disabled
   }))), /*#__PURE__*/React.createElement("fieldset", {
     className: "run-fieldset"
-  }, /*#__PURE__*/React.createElement("legend", null, "timing"), /*#__PURE__*/React.createElement("label", {
+  }, /*#__PURE__*/React.createElement("legend", null, "camera + timing"), /*#__PURE__*/React.createElement("div", {
+    className: "inline-checks wrap"
+  }, [["current", "current"], ["mock", "mock"], ["real", "real"]].map(([value, label]) => /*#__PURE__*/React.createElement("label", {
+    key: value,
+    className: "check-chip"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "radio",
+    name: "sweep-camera",
+    checked: cameraMode === value,
+    onChange: () => setCameraMode(value),
+    disabled: disabled
+  }), label))), /*#__PURE__*/React.createElement("label", {
     className: "text-input mono small"
   }, "warmup s", /*#__PURE__*/React.createElement("input", {
     type: "number",
@@ -425,7 +440,9 @@ const SweepPanel = ({
     className: "muted"
   }, "w", r.batch.wait), /*#__PURE__*/React.createElement("div", {
     className: "muted"
-  }, r.infer.mode === "single" ? "s" : r.infer.mode === "unsafe-multi" ? "u" : `m×${r.infer.instances}`)))), Object.entries(byTransport).map(([t, cells]) => /*#__PURE__*/React.createElement("div", {
+  }, r.infer.mode === "single" ? "s" : r.infer.mode === "unsafe-multi" ? "u" : `m×${r.infer.instances}`), /*#__PURE__*/React.createElement("div", {
+    className: "muted"
+  }, r.camera === "mock" ? "cam m" : r.camera === "real" ? "cam r" : "cam -")))), Object.entries(byTransport).map(([t, cells]) => /*#__PURE__*/React.createElement("div", {
     key: t,
     className: "sweep-row"
   }, /*#__PURE__*/React.createElement("div", {
@@ -436,7 +453,7 @@ const SweepPanel = ({
     style: c.status === "done" ? {
       background: fpsColor(c.fps)
     } : {},
-    title: c.status === "done" ? `${t} · batch=${c.batch.enabled ? c.batch.size : "off"} · wait=${c.batch.wait}ms · ${c.infer.mode}\n${fmt(c.fps, 1)} fps · ${fmt(c.total_ms, 1)} ms` : c.status
+    title: c.status === "done" ? `${t} · batch=${c.batch.enabled ? c.batch.size : "off"} · wait=${c.batch.wait}ms · ${c.infer.mode} · camera=${c.camera}\n${fmt(c.fps, 1)} fps · ${fmt(c.total_ms, 1)} ms` : c.status
   }, c.status === "done" && /*#__PURE__*/React.createElement("span", {
     className: "mono"
   }, fmtInt(c.fps)), c.status === "running" && /*#__PURE__*/React.createElement("span", {
@@ -449,7 +466,7 @@ const SweepPanel = ({
     className: "legend-gradient"
   }), /*#__PURE__*/React.createElement("span", null, fmtInt(minF), " \u2192 ", fmtInt(maxF)), /*#__PURE__*/React.createElement("span", {
     className: "rail-spacer"
-  }), /*#__PURE__*/React.createElement("span", null, "b\xB7 batch size \xB7 w\xB7 wait ms \xB7 s/u/m\xB7 infer mode")));
+  }), /*#__PURE__*/React.createElement("span", null, "b\xB7 batch size \xB7 w\xB7 wait ms \xB7 s/u/m\xB7 infer mode \xB7 cam m/r/-")));
 };
 Object.assign(window, {
   ClientCard,

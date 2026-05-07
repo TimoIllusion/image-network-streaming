@@ -82,6 +82,12 @@ def test_build_plan_crosses_inference_modes_and_instances():
     ]
 
 
+def test_build_plan_applies_mock_camera_to_each_run():
+    plan = build_plan(["grpc"], ["off", "on"], [2], [5.0], mock_camera=True)
+
+    assert [cfg.mock_camera for cfg in plan] == [True, True]
+
+
 def test_run_sweep_applies_config_clears_and_collects_clients():
     session = _Session()
     sleeps = []
@@ -113,6 +119,22 @@ def test_run_sweep_applies_config_clears_and_collects_clients():
         "max_wait_ms": 10.0,
         "inference_mode": "single",
         "inference_instances": 1,
+        "mock_camera": None,
     }
     assert result["runs"][0]["clients"][0]["name"] == "client-1"
     assert completed == result["runs"]
+
+
+def test_run_sweep_can_set_mock_camera():
+    session = _Session()
+
+    run_sweep(
+        [SweepConfig("grpc", True, 4, 10.0, mock_camera=False)],
+        control_base="http://control",
+        duration_s=3.0,
+        warmup_s=0.5,
+        session=session,
+        sleep=lambda _seconds: None,
+    )
+
+    assert session.posts[2][1] == {"backend": "grpc", "inference": True, "mock_camera": False}
