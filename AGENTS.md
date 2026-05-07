@@ -28,6 +28,10 @@ pytest tests/test_http_multipart.py # single file
 pytest -q                           # quiet (used in CI)
 ```
 
+## Unit Tests
+
+When creating a PR, review whether the existing test suite sufficiently covers the PR's additions and behavior changes. Before merging, repeat that review only if additional commits changed code since PR creation. If the change introduces new logic, edge cases, protocol behavior, UI/control-plane behavior, or fixes a regression, expand the unit tests in the same PR unless there is a concrete reason not to. Document the decision in the PR's `**Test:**` section, including either the tests added/run or why existing coverage is sufficient.
+
 **Lint & format:**
 ```bash
 ruff check .          # lint
