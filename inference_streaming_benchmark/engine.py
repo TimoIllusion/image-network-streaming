@@ -114,9 +114,11 @@ class InferenceEngine:
 
         if mode == "single":
             with self._lock:
-                return self._get_or_load_model()(payload, verbose=False), mode, instances
+                model = self._get_or_load_model()
+                return model(payload, verbose=False), mode, instances
         if mode == "unsafe-multi":
-            return self._get_or_load_model()(payload, verbose=False), mode, instances
+            model = self._get_or_load_model()
+            return model(payload, verbose=False), mode, instances
 
         assert instance_pool is not None
         available_instances = instance_pool["available"]
