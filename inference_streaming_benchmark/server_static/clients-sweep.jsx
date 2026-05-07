@@ -1,14 +1,31 @@
-// Per-client cards + sweep results section
+// Per-client cards + sweep results section.
 
-const ClientCard = ({ client, density }) => {
-  const { name, transport, ip, port, inferenceOn, mockCam, frames, fps, timing, fpsSeries, latSeries, batch, ageMs } = client;
-  const compact = density === "compact";
+const ClientCard = ({ client, activeTransport }) => {
+  const {
+    name, transport, ip, port, ui_url, inferenceOn, mockCam,
+    frames, fps, timing, fpsSeries, latSeries, batch, ageMs,
+  } = client;
+
+  const onMock = () => window.Actions.controlClient(name, { mock_camera: !mockCam });
+  const onPause = () => {
+    if (inferenceOn) {
+      window.Actions.controlClient(name, { inference: false });
+    } else {
+      const body = { inference: true };
+      if (activeTransport) body.backend = activeTransport;
+      window.Actions.controlClient(name, body);
+    }
+  };
+  const onClear = () => window.Actions.clearClient(name);
+
   return (
-    <div className={`client-card ${!inferenceOn ? "idle" : ""} ${compact ? "compact" : ""}`}>
+    <div className={`client-card ${!inferenceOn ? "idle" : ""}`}>
       <div className="client-head">
         <div className="client-id">
           <span className={`status-dot ${inferenceOn ? "live" : "idle"}`} />
-          <span className="client-name mono">{name}</span>
+          {ui_url
+            ? <a className="client-name mono" href={ui_url} target="_blank" rel="noopener">{name}</a>
+            : <span className="client-name mono">{name}</span>}
           <span className="client-meta mono small muted">{ip}:{port}</span>
         </div>
         <div className="client-tags">
@@ -32,7 +49,7 @@ const ClientCard = ({ client, density }) => {
         </div>
         <div className="client-metric wide">
           <div className="metric-label mono small muted">latency stages</div>
-          <Waterfall timing={timing} max={timing.total * 1.05} height={10} />
+          <Waterfall timing={timing} max={timing.total * 1.05 || 1} height={10} />
           <div className="stage-mini mono small">
             <span>enc <b>{fmt(timing.enc, 1)}</b></span>
             <span>dec <b>{fmt(timing.dec, 1)}</b></span>
@@ -46,15 +63,15 @@ const ClientCard = ({ client, density }) => {
             <span className="muted">frames</span><span>{frames}</span>
           </div>
           <div className="side-row mono small">
-            <span className="muted">batch</span><span>{batch}</span>
+            <span className="muted">batch</span><span>{fmt(batch, 1)}</span>
           </div>
           <div className="side-row mono small">
             <span className="muted">wait</span><span>{fmt(timing.wait, 1)}<span className="muted">ms</span></span>
           </div>
           <div className="client-actions">
-            <button className="btn xs">mock</button>
-            <button className="btn xs">{inferenceOn ? "pause" : "start"}</button>
-            <button className="btn xs ghost">⋯</button>
+            <button className={`btn xs ${mockCam ? "primary" : ""}`} onClick={onMock}>mock</button>
+            <button className="btn xs" onClick={onPause}>{inferenceOn ? "pause" : "start"}</button>
+            <button className="btn xs ghost" onClick={onClear} title="clear stats">clear</button>
           </div>
         </div>
       </div>
@@ -62,13 +79,14 @@ const ClientCard = ({ client, density }) => {
   );
 };
 
-const ClientGrid = ({ clients, density, sortBy, onSortBy }) => {
+const ClientGrid = ({ clients, sortBy, onSortBy }) => {
   const sorted = [...clients].sort((a, b) => {
     if (sortBy === "fps") return b.fps - a.fps;
     if (sortBy === "latency") return a.timing.total - b.timing.total;
     if (sortBy === "transport") return a.transport.localeCompare(b.transport);
     return a.name.localeCompare(b.name);
   });
+  const activeTransport = window.Data.useMeta().activeTransport;
   return (
     <div className="card">
       <div className="card-head">
@@ -80,39 +98,50 @@ const ClientGrid = ({ clients, density, sortBy, onSortBy }) => {
           ))}
         </div>
       </div>
-      <div className={`client-grid ${density}`}>
-        {sorted.map((c) => <ClientCard key={c.name} client={c} density={density} />)}
-      </div>
+      {clients.length === 0 ? (
+        <p className="hint mono small muted" style={{ padding: "12px 4px" }}>
+          No clients connected. Start a client with <span className="mono">INFSB_CONTROL_HOST</span> pointing here.
+        </p>
+      ) : (
+        <div className="client-grid">
+          {sorted.map((c) => <ClientCard key={c.name} client={c} activeTransport={activeTransport} />)}
+        </div>
+      )}
     </div>
   );
 };
 
 // ── Sweep progress + results ──────────────────────────────────────────
 const SweepPanel = ({ sweep }) => {
-  const { rows, completed, total } = sweep;
+  const { rows, completed, total, running } = sweep;
+  if (!total) return null;
   const pct = (completed / total) * 100;
 
-  // Group results by transport for a heatmap-ish read
   const byTransport = {};
   for (const r of rows) {
     if (!byTransport[r.transport]) byTransport[r.transport] = [];
     byTransport[r.transport].push(r);
   }
-  const allFps = rows.filter(r => r.fps != null).map(r => r.fps);
-  const minF = Math.min(...allFps), maxF = Math.max(...allFps);
+  const allFps = rows.filter((r) => r.fps != null).map((r) => r.fps);
+  const minF = allFps.length ? Math.min(...allFps) : 0;
+  const maxF = allFps.length ? Math.max(...allFps) : 0;
   const fpsColor = (v) => {
     if (v == null) return "var(--track)";
     const t = (v - minF) / (maxF - minF || 1);
     return `oklch(${(0.92 - t * 0.30).toFixed(3)} ${(0.04 + t * 0.12).toFixed(3)} ${30 + t * 90})`;
   };
 
+  const txCount = Object.keys(byTransport).length;
+  const colCount = txCount ? Math.floor(rows.length / txCount) : 0;
+  const headerCells = colCount > 0 ? rows.slice(0, colCount) : [];
+
   return (
     <div className="card">
       <div className="card-head">
         <h2>multi-run sweep</h2>
         <div className="sweep-status mono small">
-          <span className="dot dot-live" />
-          running · <b>{completed}</b><span className="muted">/{total}</span> · ETA <span className="mono">03:42</span>
+          {running && <span className="dot dot-live" />}
+          {running ? "running" : completed === total ? "complete" : "idle"} · <b>{completed}</b><span className="muted">/{total}</span>
         </div>
       </div>
 
@@ -122,31 +151,37 @@ const SweepPanel = ({ sweep }) => {
           <div className="progress-marker" style={{ left: `${pct}%` }} />
         </div>
         <div className="progress-meta mono small muted">
-          <span>warmup 2s</span><span>duration 10s</span><span>{Math.round(pct)}%</span>
+          <span>{completed} done</span>
+          <span>{total - completed} queued</span>
+          <span>{Math.round(pct)}%</span>
         </div>
       </div>
 
       <div className="sweep-grid">
-        <div className="sweep-grid-head">
-          <div className="mono small muted">transport</div>
-          {rows.length > 0 && rows.slice(0, rows.length / Object.keys(byTransport).length).map((r, i) => (
-            <div key={i} className="mono small muted sweep-cell-head">
-              <div>b{r.batch.enabled ? r.batch.size : "○"}</div>
-              <div className="muted">w{r.batch.wait}</div>
-              <div className="muted">{r.infer.mode === "single" ? "s" : r.infer.mode === "unsafe-multi" ? "u" : `m×${r.infer.instances}`}</div>
-            </div>
-          ))}
-        </div>
+        {headerCells.length > 0 && (
+          <div className="sweep-grid-head">
+            <div className="mono small muted">transport</div>
+            {headerCells.map((r, i) => (
+              <div key={i} className="mono small muted sweep-cell-head">
+                <div>b{r.batch.enabled ? r.batch.size : "○"}</div>
+                <div className="muted">w{r.batch.wait}</div>
+                <div className="muted">{r.infer.mode === "single" ? "s" : r.infer.mode === "unsafe-multi" ? "u" : `m×${r.infer.instances}`}</div>
+              </div>
+            ))}
+          </div>
+        )}
         {Object.entries(byTransport).map(([t, cells]) => (
           <div key={t} className="sweep-row">
             <div className="mono small sweep-tx">{t}</div>
             {cells.map((c) => (
-              <div key={c.id}
-                   className={`sweep-cell ${c.status}`}
-                   style={c.status === "done" ? { background: fpsColor(c.fps) } : {}}
-                   title={c.status === "done"
-                     ? `${t} · batch=${c.batch.enabled ? c.batch.size : "off"} · wait=${c.batch.wait}ms · ${c.infer.mode}\n${fmt(c.fps, 1)} fps · ${fmt(c.total_ms, 1)} ms`
-                     : c.status}>
+              <div
+                key={c.id}
+                className={`sweep-cell ${c.status}`}
+                style={c.status === "done" ? { background: fpsColor(c.fps) } : {}}
+                title={c.status === "done"
+                  ? `${t} · batch=${c.batch.enabled ? c.batch.size : "off"} · wait=${c.batch.wait}ms · ${c.infer.mode}\n${fmt(c.fps, 1)} fps · ${fmt(c.total_ms, 1)} ms`
+                  : c.status}
+              >
                 {c.status === "done" && <span className="mono">{fmtInt(c.fps)}</span>}
                 {c.status === "running" && <span className="mono blink">▸▸</span>}
                 {c.status === "queued" && <span className="mono muted">·</span>}
@@ -156,13 +191,15 @@ const SweepPanel = ({ sweep }) => {
         ))}
       </div>
 
-      <div className="sweep-legend mono small muted">
-        <span>cell · fps · color = relative throughput</span>
-        <span className="legend-gradient" />
-        <span>{fmtInt(minF)} → {fmtInt(maxF)}</span>
-        <span className="rail-spacer" />
-        <span>b· batch size · w· wait ms · s/u/m· infer mode</span>
-      </div>
+      {allFps.length > 0 && (
+        <div className="sweep-legend mono small muted">
+          <span>cell · fps · color = relative throughput</span>
+          <span className="legend-gradient" />
+          <span>{fmtInt(minF)} → {fmtInt(maxF)}</span>
+          <span className="rail-spacer" />
+          <span>b· batch size · w· wait ms · s/u/m· infer mode</span>
+        </div>
+      )}
     </div>
   );
 };

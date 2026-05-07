@@ -102,6 +102,21 @@ html, body {
 .app-header .meta .live-host { color: var(--ink-2); }
 .app-header .crumb { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .app-header .crumb b { color: var(--ink); font-weight: 600; }
+.theme-toggle {
+  font-family: var(--mono); font-size: 10.5px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 3px;
+  cursor: pointer;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.theme-toggle:hover { color: var(--ink); border-color: var(--border-strong); }
+.rail-status {
+  margin-right: 8px;
+  white-space: nowrap;
+}
 
 /* ── Cards ─────────────────────────────── */
 .card {

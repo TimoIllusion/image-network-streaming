@@ -2,7 +2,7 @@
 // Used by the dashboard for sparklines, waterfall, and bar charts.
 
 const Spark = ({ data, width = 120, height = 28, color = "currentColor", fill = false, strokeWidth = 1.25 }) => {
-  if (!data || data.length === 0) return null;
+  if (!data || data.length < 2) return <svg width={width} height={height} style={{ display: "block" }} />;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
@@ -146,7 +146,13 @@ const StackedBar = ({ timing, max, height = 18 }) => {
 
 // Big aggregate FPS chart
 const AreaChart = ({ data, width, height, color = "var(--accent)" }) => {
-  if (!data || data.length === 0) return null;
+  if (!data || data.length < 2) {
+    return (
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ display: "block" }}>
+        <line x1={0} x2={width} y1={height / 2} y2={height / 2} stroke="var(--border)" strokeDasharray="2 4" />
+      </svg>
+    );
+  }
   const min = Math.min(...data);
   const max = Math.max(...data);
   const padTop = 8;
