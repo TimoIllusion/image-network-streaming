@@ -80,6 +80,9 @@ const App = () => {
     }
   }), clients.length > 0 && /*#__PURE__*/React.createElement(TransportComparison, {
     clients: clients
+  }), /*#__PURE__*/React.createElement(RunForm, {
+    transports: transports,
+    sweep: sweep
   }), sweep.total > 0 && /*#__PURE__*/React.createElement(SweepPanel, {
     sweep: sweep
   }), /*#__PURE__*/React.createElement(ClientGrid, {

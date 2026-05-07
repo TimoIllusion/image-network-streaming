@@ -111,6 +111,176 @@ const ClientGrid = ({ clients, sortBy, onSortBy }) => {
   );
 };
 
+// ── Sweep start form ──────────────────────────────────────────────────
+const parseNumberList = (value, parser) => String(value)
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean)
+  .map(parser);
+
+const RunForm = ({ transports, sweep }) => {
+  const transportNames = transports.length
+    ? transports.map((t) => t.name)
+    : ["imagezmq", "zmq_raw", "grpc", "websocket_raw", "http_multipart_raw", "http_multipart", "zmq", "websocket"];
+
+  const [selectedTransports, setSelectedTransports] = React.useState([]);
+  const [batchOff, setBatchOff] = React.useState(true);
+  const [batchOn, setBatchOn] = React.useState(true);
+  const [batchSizes, setBatchSizes] = React.useState("1,2,4,8");
+  const [batchWaits, setBatchWaits] = React.useState("0,5,10,20");
+  const [inferSingle, setInferSingle] = React.useState(true);
+  const [inferUnsafe, setInferUnsafe] = React.useState(false);
+  const [inferMulti, setInferMulti] = React.useState(false);
+  const [inferInstances, setInferInstances] = React.useState("1,2");
+  const [warmupS, setWarmupS] = React.useState(2);
+  const [durationS, setDurationS] = React.useState(10);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [message, setMessage] = React.useState("");
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    setSelectedTransports((prev) => {
+      if (prev.length) return prev.filter((name) => transportNames.includes(name));
+      return transportNames;
+    });
+  }, [transportNames.join("|")]);
+
+  const toggleTransport = (name) => {
+    setSelectedTransports((prev) => (
+      prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name]
+    ));
+  };
+
+  const setAllTransports = (checked) => {
+    setSelectedTransports(checked ? transportNames : []);
+  };
+
+  const buildBody = () => {
+    const batchModes = [];
+    if (batchOff) batchModes.push("off");
+    if (batchOn) batchModes.push("on");
+    const inferenceModes = [];
+    if (inferSingle) inferenceModes.push("single");
+    if (inferUnsafe) inferenceModes.push("unsafe-multi");
+    if (inferMulti) inferenceModes.push("multi-instance");
+    return {
+      transports: selectedTransports,
+      batch_modes: batchModes,
+      batch_sizes: parseNumberList(batchSizes, (item) => Number.parseInt(item, 10)),
+      batch_waits_ms: parseNumberList(batchWaits, Number.parseFloat),
+      inference_modes: inferenceModes,
+      inference_instances: parseNumberList(inferInstances, (item) => Number.parseInt(item, 10)),
+      warmup_s: Number.parseFloat(warmupS),
+      duration_s: Number.parseFloat(durationS),
+    };
+  };
+
+  const onSubmit = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    setMessage("starting sweep...");
+    try {
+      const payload = await window.Actions.startSweep(buildBody());
+      setMessage(`started ${payload.plan?.length || 0} runs`);
+    } catch (e) {
+      setError(e.message || String(e));
+      setMessage("");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const disabled = submitting || !!sweep.running;
+  const allSelected = selectedTransports.length === transportNames.length;
+
+  return (
+    <form className="card run-form" onSubmit={onSubmit}>
+      <div className="card-head">
+        <h2>start sweep</h2>
+        <div className="sweep-status mono small">
+          {sweep.running && <span className="dot dot-live" />}
+          {sweep.running ? "running" : message || "ready"}
+        </div>
+      </div>
+
+      <div className="run-form-grid">
+        <fieldset className="run-fieldset run-fieldset-wide">
+          <legend>transports</legend>
+          <label className="check-chip all">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={(e) => setAllTransports(e.target.checked)}
+              disabled={disabled}
+            />
+            all
+          </label>
+          <div className="check-grid">
+            {transportNames.map((name) => (
+              <label key={name} className="check-chip">
+                <input
+                  type="checkbox"
+                  checked={selectedTransports.includes(name)}
+                  onChange={() => toggleTransport(name)}
+                  disabled={disabled}
+                />
+                {name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="run-fieldset">
+          <legend>batching</legend>
+          <div className="inline-checks">
+            <label className="check-chip"><input type="checkbox" checked={batchOff} onChange={(e) => setBatchOff(e.target.checked)} disabled={disabled} />off</label>
+            <label className="check-chip"><input type="checkbox" checked={batchOn} onChange={(e) => setBatchOn(e.target.checked)} disabled={disabled} />on</label>
+          </div>
+          <label className="text-input mono small">
+            sizes
+            <input value={batchSizes} onChange={(e) => setBatchSizes(e.target.value)} disabled={disabled} />
+          </label>
+          <label className="text-input mono small">
+            waits ms
+            <input value={batchWaits} onChange={(e) => setBatchWaits(e.target.value)} disabled={disabled} />
+          </label>
+        </fieldset>
+
+        <fieldset className="run-fieldset">
+          <legend>inference</legend>
+          <div className="inline-checks wrap">
+            <label className="check-chip"><input type="checkbox" checked={inferSingle} onChange={(e) => setInferSingle(e.target.checked)} disabled={disabled} />single</label>
+            <label className="check-chip"><input type="checkbox" checked={inferUnsafe} onChange={(e) => setInferUnsafe(e.target.checked)} disabled={disabled} />unsafe-multi</label>
+            <label className="check-chip"><input type="checkbox" checked={inferMulti} onChange={(e) => setInferMulti(e.target.checked)} disabled={disabled} />multi-instance</label>
+          </div>
+          <label className="text-input mono small">
+            instances
+            <input value={inferInstances} onChange={(e) => setInferInstances(e.target.value)} disabled={disabled} />
+          </label>
+        </fieldset>
+
+        <fieldset className="run-fieldset">
+          <legend>timing</legend>
+          <label className="text-input mono small">
+            warmup s
+            <input type="number" min="0" step="0.1" value={warmupS} onChange={(e) => setWarmupS(e.target.value)} disabled={disabled} />
+          </label>
+          <label className="text-input mono small">
+            duration s
+            <input type="number" min="0.1" step="0.1" value={durationS} onChange={(e) => setDurationS(e.target.value)} disabled={disabled} />
+          </label>
+          <button className="btn primary run-submit" type="submit" disabled={disabled}>
+            {sweep.running ? "sweep running" : submitting ? "starting..." : "start sweep"}
+          </button>
+        </fieldset>
+      </div>
+
+      {error && <div className="run-message error mono small">{error}</div>}
+    </form>
+  );
+};
+
 // ── Sweep progress + results ──────────────────────────────────────────
 const SweepPanel = ({ sweep }) => {
   const { rows, completed, total, running } = sweep;
@@ -204,4 +374,4 @@ const SweepPanel = ({ sweep }) => {
   );
 };
 
-Object.assign(window, { ClientCard, ClientGrid, SweepPanel });
+Object.assign(window, { ClientCard, ClientGrid, RunForm, SweepPanel });

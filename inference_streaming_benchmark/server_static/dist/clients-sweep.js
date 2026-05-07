@@ -169,6 +169,195 @@ const ClientGrid = ({
   }))));
 };
 
+// ── Sweep start form ──────────────────────────────────────────────────
+const parseNumberList = (value, parser) => String(value).split(",").map(item => item.trim()).filter(Boolean).map(parser);
+const RunForm = ({
+  transports,
+  sweep
+}) => {
+  const transportNames = transports.length ? transports.map(t => t.name) : ["imagezmq", "zmq_raw", "grpc", "websocket_raw", "http_multipart_raw", "http_multipart", "zmq", "websocket"];
+  const [selectedTransports, setSelectedTransports] = React.useState([]);
+  const [batchOff, setBatchOff] = React.useState(true);
+  const [batchOn, setBatchOn] = React.useState(true);
+  const [batchSizes, setBatchSizes] = React.useState("1,2,4,8");
+  const [batchWaits, setBatchWaits] = React.useState("0,5,10,20");
+  const [inferSingle, setInferSingle] = React.useState(true);
+  const [inferUnsafe, setInferUnsafe] = React.useState(false);
+  const [inferMulti, setInferMulti] = React.useState(false);
+  const [inferInstances, setInferInstances] = React.useState("1,2");
+  const [warmupS, setWarmupS] = React.useState(2);
+  const [durationS, setDurationS] = React.useState(10);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [message, setMessage] = React.useState("");
+  const [error, setError] = React.useState("");
+  React.useEffect(() => {
+    setSelectedTransports(prev => {
+      if (prev.length) return prev.filter(name => transportNames.includes(name));
+      return transportNames;
+    });
+  }, [transportNames.join("|")]);
+  const toggleTransport = name => {
+    setSelectedTransports(prev => prev.includes(name) ? prev.filter(item => item !== name) : [...prev, name]);
+  };
+  const setAllTransports = checked => {
+    setSelectedTransports(checked ? transportNames : []);
+  };
+  const buildBody = () => {
+    const batchModes = [];
+    if (batchOff) batchModes.push("off");
+    if (batchOn) batchModes.push("on");
+    const inferenceModes = [];
+    if (inferSingle) inferenceModes.push("single");
+    if (inferUnsafe) inferenceModes.push("unsafe-multi");
+    if (inferMulti) inferenceModes.push("multi-instance");
+    return {
+      transports: selectedTransports,
+      batch_modes: batchModes,
+      batch_sizes: parseNumberList(batchSizes, item => Number.parseInt(item, 10)),
+      batch_waits_ms: parseNumberList(batchWaits, Number.parseFloat),
+      inference_modes: inferenceModes,
+      inference_instances: parseNumberList(inferInstances, item => Number.parseInt(item, 10)),
+      warmup_s: Number.parseFloat(warmupS),
+      duration_s: Number.parseFloat(durationS)
+    };
+  };
+  const onSubmit = async event => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    setMessage("starting sweep...");
+    try {
+      const payload = await window.Actions.startSweep(buildBody());
+      setMessage(`started ${payload.plan?.length || 0} runs`);
+    } catch (e) {
+      setError(e.message || String(e));
+      setMessage("");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  const disabled = submitting || !!sweep.running;
+  const allSelected = selectedTransports.length === transportNames.length;
+  return /*#__PURE__*/React.createElement("form", {
+    className: "card run-form",
+    onSubmit: onSubmit
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-head"
+  }, /*#__PURE__*/React.createElement("h2", null, "start sweep"), /*#__PURE__*/React.createElement("div", {
+    className: "sweep-status mono small"
+  }, sweep.running && /*#__PURE__*/React.createElement("span", {
+    className: "dot dot-live"
+  }), sweep.running ? "running" : message || "ready")), /*#__PURE__*/React.createElement("div", {
+    className: "run-form-grid"
+  }, /*#__PURE__*/React.createElement("fieldset", {
+    className: "run-fieldset run-fieldset-wide"
+  }, /*#__PURE__*/React.createElement("legend", null, "transports"), /*#__PURE__*/React.createElement("label", {
+    className: "check-chip all"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: allSelected,
+    onChange: e => setAllTransports(e.target.checked),
+    disabled: disabled
+  }), "all"), /*#__PURE__*/React.createElement("div", {
+    className: "check-grid"
+  }, transportNames.map(name => /*#__PURE__*/React.createElement("label", {
+    key: name,
+    className: "check-chip"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: selectedTransports.includes(name),
+    onChange: () => toggleTransport(name),
+    disabled: disabled
+  }), name)))), /*#__PURE__*/React.createElement("fieldset", {
+    className: "run-fieldset"
+  }, /*#__PURE__*/React.createElement("legend", null, "batching"), /*#__PURE__*/React.createElement("div", {
+    className: "inline-checks"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "check-chip"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: batchOff,
+    onChange: e => setBatchOff(e.target.checked),
+    disabled: disabled
+  }), "off"), /*#__PURE__*/React.createElement("label", {
+    className: "check-chip"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: batchOn,
+    onChange: e => setBatchOn(e.target.checked),
+    disabled: disabled
+  }), "on")), /*#__PURE__*/React.createElement("label", {
+    className: "text-input mono small"
+  }, "sizes", /*#__PURE__*/React.createElement("input", {
+    value: batchSizes,
+    onChange: e => setBatchSizes(e.target.value),
+    disabled: disabled
+  })), /*#__PURE__*/React.createElement("label", {
+    className: "text-input mono small"
+  }, "waits ms", /*#__PURE__*/React.createElement("input", {
+    value: batchWaits,
+    onChange: e => setBatchWaits(e.target.value),
+    disabled: disabled
+  }))), /*#__PURE__*/React.createElement("fieldset", {
+    className: "run-fieldset"
+  }, /*#__PURE__*/React.createElement("legend", null, "inference"), /*#__PURE__*/React.createElement("div", {
+    className: "inline-checks wrap"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "check-chip"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: inferSingle,
+    onChange: e => setInferSingle(e.target.checked),
+    disabled: disabled
+  }), "single"), /*#__PURE__*/React.createElement("label", {
+    className: "check-chip"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: inferUnsafe,
+    onChange: e => setInferUnsafe(e.target.checked),
+    disabled: disabled
+  }), "unsafe-multi"), /*#__PURE__*/React.createElement("label", {
+    className: "check-chip"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: inferMulti,
+    onChange: e => setInferMulti(e.target.checked),
+    disabled: disabled
+  }), "multi-instance")), /*#__PURE__*/React.createElement("label", {
+    className: "text-input mono small"
+  }, "instances", /*#__PURE__*/React.createElement("input", {
+    value: inferInstances,
+    onChange: e => setInferInstances(e.target.value),
+    disabled: disabled
+  }))), /*#__PURE__*/React.createElement("fieldset", {
+    className: "run-fieldset"
+  }, /*#__PURE__*/React.createElement("legend", null, "timing"), /*#__PURE__*/React.createElement("label", {
+    className: "text-input mono small"
+  }, "warmup s", /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "0",
+    step: "0.1",
+    value: warmupS,
+    onChange: e => setWarmupS(e.target.value),
+    disabled: disabled
+  })), /*#__PURE__*/React.createElement("label", {
+    className: "text-input mono small"
+  }, "duration s", /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "0.1",
+    step: "0.1",
+    value: durationS,
+    onChange: e => setDurationS(e.target.value),
+    disabled: disabled
+  })), /*#__PURE__*/React.createElement("button", {
+    className: "btn primary run-submit",
+    type: "submit",
+    disabled: disabled
+  }, sweep.running ? "sweep running" : submitting ? "starting..." : "start sweep"))), error && /*#__PURE__*/React.createElement("div", {
+    className: "run-message error mono small"
+  }, error));
+};
+
 // ── Sweep progress + results ──────────────────────────────────────────
 const SweepPanel = ({
   sweep
@@ -265,5 +454,6 @@ const SweepPanel = ({
 Object.assign(window, {
   ClientCard,
   ClientGrid,
+  RunForm,
   SweepPanel
 });

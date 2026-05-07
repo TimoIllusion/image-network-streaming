@@ -74,6 +74,8 @@ const App = () => {
 
       {clients.length > 0 && <TransportComparison clients={clients} />}
 
+      <RunForm transports={transports} sweep={sweep} />
+
       {sweep.total > 0 && <SweepPanel sweep={sweep} />}
 
       <ClientGrid clients={clients} sortBy={sortBy} onSortBy={setSortBy} />

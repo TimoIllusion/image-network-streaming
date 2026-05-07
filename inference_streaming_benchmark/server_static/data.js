@@ -315,6 +315,25 @@
     } catch { /* transient */ }
   }
 
+  async function startSweep(body) {
+    const r = await fetch("/multi-run/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    let payload = null;
+    try {
+      payload = await r.json();
+    } catch {
+      payload = { detail: await r.text() };
+    }
+    if (!r.ok) {
+      throw new Error(payload?.detail || r.statusText || "failed to start sweep");
+    }
+    Store.set({ sweepStatus: payload });
+    return payload;
+  }
+
   function start() {
     refreshTransports();
     refreshClients();
@@ -592,6 +611,7 @@
     applyTransport,
     applyBatching,
     applyInference,
+    startSweep,
     controlClient,
     clearClient,
     clearAll,
