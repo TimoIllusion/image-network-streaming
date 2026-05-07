@@ -9,28 +9,36 @@ const Spark = ({
   fill = false,
   strokeWidth = 1.25
 }) => {
-  if (!data || data.length < 2) return /*#__PURE__*/React.createElement("svg", {
-    width: width,
-    height: height,
-    style: {
-      display: "block"
-    }
-  });
+  const plotWidth = Number.isFinite(Number(width)) ? Number(width) : 120;
+  const svgWidth = typeof width === "string" ? width : plotWidth;
+  if (!data || data.length < 2) {
+    return /*#__PURE__*/React.createElement("svg", {
+      width: svgWidth,
+      height: height,
+      viewBox: `0 0 ${plotWidth} ${height}`,
+      preserveAspectRatio: "none",
+      style: {
+        display: "block"
+      }
+    });
+  }
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
-  const stepX = width / (data.length - 1);
+  const stepX = plotWidth / (data.length - 1);
   const points = data.map((v, i) => {
     const x = i * stepX;
     const y = height - (v - min) / range * (height - 2) - 1;
     return [x, y];
   });
   const path = "M" + points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" L");
-  const fillPath = fill ? `${path} L${width},${height} L0,${height} Z` : null;
+  const fillPath = fill ? `${path} L${plotWidth},${height} L0,${height} Z` : null;
   const last = points[points.length - 1];
   return /*#__PURE__*/React.createElement("svg", {
-    width: width,
+    width: svgWidth,
     height: height,
+    viewBox: `0 0 ${plotWidth} ${height}`,
+    preserveAspectRatio: "none",
     style: {
       display: "block",
       overflow: "visible"

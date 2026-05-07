@@ -2,21 +2,39 @@
 // Used by the dashboard for sparklines, waterfall, and bar charts.
 
 const Spark = ({ data, width = 120, height = 28, color = "currentColor", fill = false, strokeWidth = 1.25 }) => {
-  if (!data || data.length < 2) return <svg width={width} height={height} style={{ display: "block" }} />;
+  const plotWidth = Number.isFinite(Number(width)) ? Number(width) : 120;
+  const svgWidth = typeof width === "string" ? width : plotWidth;
+  if (!data || data.length < 2) {
+    return (
+      <svg
+        width={svgWidth}
+        height={height}
+        viewBox={`0 0 ${plotWidth} ${height}`}
+        preserveAspectRatio="none"
+        style={{ display: "block" }}
+      />
+    );
+  }
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
-  const stepX = width / (data.length - 1);
+  const stepX = plotWidth / (data.length - 1);
   const points = data.map((v, i) => {
     const x = i * stepX;
     const y = height - ((v - min) / range) * (height - 2) - 1;
     return [x, y];
   });
   const path = "M" + points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" L");
-  const fillPath = fill ? `${path} L${width},${height} L0,${height} Z` : null;
+  const fillPath = fill ? `${path} L${plotWidth},${height} L0,${height} Z` : null;
   const last = points[points.length - 1];
   return (
-    <svg width={width} height={height} style={{ display: "block", overflow: "visible" }}>
+    <svg
+      width={svgWidth}
+      height={height}
+      viewBox={`0 0 ${plotWidth} ${height}`}
+      preserveAspectRatio="none"
+      style={{ display: "block", overflow: "visible" }}
+    >
       {fillPath && <path d={fillPath} fill={color} opacity="0.12" />}
       <path d={path} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
       <circle cx={last[0]} cy={last[1]} r={1.6} fill={color} />
