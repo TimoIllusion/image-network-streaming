@@ -9,7 +9,7 @@ import cv2
 from inference_streaming_benchmark.logging import logger
 from inference_streaming_benchmark.transports.codec import FRAME_SHAPE
 
-_MOCK_IMAGE_PATH = Path(__file__).parents[2] / "resources" / "example_dall_e.png"
+_MOCK_IMAGE_PATH = Path(__file__).parents[2] / "resources" / "example_dall_e.jpg"
 
 CAMERA_MODES = ("real", "mock")
 
@@ -17,7 +17,7 @@ CAMERA_MODES = ("real", "mock")
 class _FakeVideoCapture:
     """Static 1920×1080 BGR frames for headless clients and Claude-driven smoke tests.
 
-    Returns the resources/example_dall_e.png image (resized to 1920×1080) with a
+    Returns the resources/example_dall_e.jpg image (resized to 1920×1080) with a
     timestamp overlay at ~30fps. The image contains people, chairs, a dining table,
     and a laptop so YOLO produces real detections.
     """
