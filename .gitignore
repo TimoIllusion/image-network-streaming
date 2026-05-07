@@ -12,6 +12,9 @@ Ultralytics/
 # Scratch space for intermediate files (specs, drafts, scratch notes)
 temp/
 
+# Playwright MCP cache
+.playwright-mcp/
+
 .idea/
 .vscode/
 
