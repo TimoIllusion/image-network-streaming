@@ -23,10 +23,16 @@ pip install -e ".[dev,test]"  # pip fallback
 
 **Test:**
 ```bash
-pytest tests                        # all tests
+pytest tests                        # all Python tests
 pytest tests/test_http_multipart.py # single file
 pytest -q                           # quiet (used in CI)
+npm test                            # JS tests (vitest, tests/js/)
+npm run build                       # rebuild server_static/dist/ when *.jsx changes (CI runs this)
 ```
+
+## Unit Tests
+
+When creating a PR, review whether the existing test suite sufficiently covers the PR's additions and behavior changes. Before merging, repeat that review only if additional commits changed code since PR creation. If the change introduces new logic, edge cases, protocol behavior, UI/control-plane behavior, or fixes a regression, expand the unit tests in the same PR unless there is a concrete reason not to. Document the decision in the PR's `**Test:**` section, including either the tests added/run or why existing coverage is sufficient.
 
 **Lint & format:**
 ```bash
@@ -37,18 +43,18 @@ ruff format --check . # CI-style format check
 
 **Run the server + a client:**
 ```bash
-python serve.py        # control plane + central UI on :9000, http_multipart active by default
+python server.py        # control plane + central UI on :9000, http_multipart active by default
 python client.py       # http://127.0.0.1:8501 (per-device UI)
 ```
 
 Multi-device: set `INFSB_CONTROL_HOST=<server-ip>` (and optionally `INFSB_CLIENT_NAME=<friendly>`) on each client machine. Clients auto-register on startup; central UI lives at `http://<server-ip>:9000/`.
 
-Options: `python serve.py --default zmq` (start with zmq active), `python serve.py --default none` (idle until a client picks).
+Options: `python server.py --default zmq` (start with zmq active), `python server.py --default none` (idle until a client picks).
 
 **Docker:**
 ```bash
 docker build -f ./docker/Dockerfile -t inference-streaming-benchmark:latest .
-# CMD = `python serve.py` (http_multipart active by default). Expose :9000 + transport ports you need.
+# CMD = `python server.py` (http_multipart active by default). Expose :9000 + transport ports you need.
 docker run -it --rm --shm-size=8g --gpus=all -p 9000:9000 -p 8008:8008 inference-streaming-benchmark:latest
 ```
 
@@ -70,7 +76,7 @@ One AI server process hosts every transport; **exactly one transport is active a
 
 **Client registry (`inference_streaming_benchmark/client_registry.py`):** in-memory thread-safe registry of connected clients. Stale entries (no heartbeat for >10s) age out lazily on `list_active`.
 
-**Entry point (`serve.py`):** Kicks off `Server` + control plane; `--default` flag picks the initial transport (or `none` for idle).
+**Entry point (`server.py`):** Kicks off `Server` + control plane; `--default` flag picks the initial transport (or `none` for idle).
 
 **Client (`client.py` + `inference_streaming_benchmark/client/`):** FastAPI app serving a per-device static page + MJPEG video feed. On control-plane requests from the browser it forwards `POST /switch` to the server, then connects a local `Transport` client using `registry.get(name)()`. The frame loop calls `client.send(frame)` and draws detections + FPS overlays. On startup, `Registrar` (`client/registration.py`) auto-registers with the server and sends a heartbeat every second carrying current stats. The mock-camera mode is a runtime toggle (per-device UI checkbox or remote control via the central UI).
 

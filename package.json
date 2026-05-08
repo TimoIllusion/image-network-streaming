@@ -1,0 +1,16 @@
+{
+  "name": "inference-streaming-benchmark-ui",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Build tooling for the operator console JSX bundle (server_static/).",
+  "scripts": {
+    "build": "babel inference_streaming_benchmark/server_static --extensions .jsx --out-dir inference_streaming_benchmark/server_static/dist --presets=@babel/preset-react",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.24.0",
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "vitest": "^1.6.0"
+  }
+}

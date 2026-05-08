@@ -28,6 +28,7 @@ class SweepConfig:
     max_wait_ms: float
     inference_mode: str = "single"
     inference_instances: int = 1
+    mock_camera: bool | None = None
 
 
 def parse_csv_strings(value: str) -> list[str]:
@@ -49,6 +50,7 @@ def build_plan(
     batch_waits_ms: list[float],
     inference_modes: list[str] | None = None,
     inference_instances: list[int] | None = None,
+    mock_camera: bool | None = None,
 ) -> list[SweepConfig]:
     plan: list[SweepConfig] = []
     inference_modes = inference_modes or ["single"]
@@ -58,11 +60,13 @@ def build_plan(
         for instance_count in mode_instances:
             for transport in transports:
                 if "off" in batch_modes:
-                    plan.append(SweepConfig(transport, False, 1, 0.0, inference_mode, instance_count))
+                    plan.append(SweepConfig(transport, False, 1, 0.0, inference_mode, instance_count, mock_camera))
                 if "on" in batch_modes:
                     for size in batch_sizes:
                         for wait_ms in batch_waits_ms:
-                            plan.append(SweepConfig(transport, True, size, wait_ms, inference_mode, instance_count))
+                            plan.append(
+                                SweepConfig(transport, True, size, wait_ms, inference_mode, instance_count, mock_camera)
+                            )
     return plan
 
 
@@ -108,9 +112,13 @@ def run_sweep(
             )
             batching_response.raise_for_status()
 
+            control_payload = {"backend": config.transport, "inference": True}
+            if config.mock_camera is not None:
+                control_payload["mock_camera"] = config.mock_camera
+
             control_response = session.post(
                 f"{control_base}/clients/control-all",
-                json={"backend": config.transport, "inference": True},
+                json=control_payload,
                 timeout=CONTROL_TIMEOUT_S,
             )
             control_response.raise_for_status()
@@ -158,6 +166,12 @@ def _parse_args() -> argparse.Namespace:
         help="comma-separated inference modes: single,unsafe-multi,multi-instance",
     )
     parser.add_argument("--inference-instances", default="1", help="comma-separated instance counts")
+    parser.add_argument(
+        "--camera",
+        choices=["current", "mock", "real"],
+        default="current",
+        help="camera mode to apply before each run (default: current)",
+    )
     parser.add_argument("--duration-s", type=float, default=10.0, help="measurement duration per run")
     parser.add_argument("--warmup-s", type=float, default=2.0, help="warmup duration before clearing stats")
     parser.add_argument("--output", default="benchmark-runs.json", help="JSON output path")
@@ -182,6 +196,7 @@ def main() -> None:
             batch_waits_ms=parse_csv_floats(args.batch_waits_ms),
             inference_modes=parse_csv_strings(args.inference_modes),
             inference_instances=parse_csv_ints(args.inference_instances),
+            mock_camera={"mock": True, "real": False}.get(args.camera),
         )
         result = run_sweep(
             plan,

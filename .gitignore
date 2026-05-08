@@ -12,6 +12,12 @@ Ultralytics/
 # Scratch space for intermediate files (specs, drafts, scratch notes)
 temp/
 
+# Playwright MCP cache
+.playwright-mcp/
+
+# Node modules used to pre-compile the operator console JSX (npm run build)
+node_modules/
+
 .idea/
 .vscode/
 
@@ -29,7 +35,8 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+# Anchored so server_static/dist/ (operator console build output) stays tracked.
+/dist/
 downloads/
 eggs/
 .eggs/

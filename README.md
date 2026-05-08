@@ -2,7 +2,9 @@
 
 Comparison implementation for image transmission and inference response using an AI inference server with multiple communication systems: HTTP multipart (FastAPI), ZeroMQ (ZMQ), ImageZMQ, grpc.
 
-![Inference streaming benchmark sweep and aggregation UI](docs/assets/ui-sweep-aggregation-preview.jpg)
+![Central operator panel — live aggregate, latency breakdown, and transport head-to-head](docs/assets/ui-operator-overview.png)
+
+![Sweep configuration and connected-clients grid](docs/assets/ui-operator-sweep-clients.png)
 
 The central operator UI can sweep transport and batching configurations, aggregate benchmark results, and compare per-client performance across active backends.
 

@@ -142,6 +142,7 @@ class MultiRunBody(BaseModel):
     batch_waits_ms: list[float] = Field(default_factory=lambda: [0.0, 5.0, 10.0, 20.0])
     inference_modes: list[str] = Field(default_factory=lambda: ["single"])
     inference_instances: list[int] = Field(default_factory=lambda: [1])
+    mock_camera: bool | None = None
     duration_s: float = 10.0
     warmup_s: float = 2.0
 
@@ -467,6 +468,7 @@ def build_control_app(
             body.batch_waits_ms,
             inference_modes=body.inference_modes,
             inference_instances=body.inference_instances,
+            mock_camera=body.mock_camera,
         )
         if not plan:
             raise HTTPException(status_code=400, detail="multi-run plan is empty")

@@ -393,6 +393,7 @@ def test_multi_run_start_and_status():
                 "batch_modes": ["off", "on"],
                 "batch_sizes": [2],
                 "batch_waits_ms": [5],
+                "mock_camera": True,
                 "duration_s": 0.1,
                 "warmup_s": 0,
             },
@@ -406,7 +407,9 @@ def test_multi_run_start_and_status():
 
     assert status["error"] is None
     assert len(status["plan"]) == 2
+    assert status["plan"][0]["mock_camera"] is True
     assert status["result"]["runs"][0]["config"] == {"transport": "grpc"}
+    assert calls[0][0][0].mock_camera is True
     assert calls[0][1:] == ("http://control", 0.1, 0.0)
 
 
