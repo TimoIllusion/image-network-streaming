@@ -112,12 +112,6 @@ const ClientGrid = ({ clients, sortBy, onSortBy }) => {
 };
 
 // ── Sweep start form ──────────────────────────────────────────────────
-const parseNumberList = (value, parser) => String(value)
-  .split(",")
-  .map((item) => item.trim())
-  .filter(Boolean)
-  .map(parser);
-
 const RunForm = ({ transports, sweep }) => {
   const transportNames = transports.length
     ? transports.map((t) => t.name)
@@ -158,36 +152,18 @@ const RunForm = ({ transports, sweep }) => {
     setSelectedTransports(checked ? transportNames : []);
   };
 
-  const buildBody = () => {
-    const batchModes = [];
-    if (batchOff) batchModes.push("off");
-    if (batchOn) batchModes.push("on");
-    const inferenceModes = [];
-    if (inferSingle) inferenceModes.push("single");
-    if (inferUnsafe) inferenceModes.push("unsafe-multi");
-    if (inferMulti) inferenceModes.push("multi-instance");
-    const body = {
-      transports: selectedTransports,
-      batch_modes: batchModes,
-      batch_sizes: parseNumberList(batchSizes, (item) => Number.parseInt(item, 10)),
-      batch_waits_ms: parseNumberList(batchWaits, Number.parseFloat),
-      inference_modes: inferenceModes,
-      inference_instances: parseNumberList(inferInstances, (item) => Number.parseInt(item, 10)),
-      warmup_s: Number.parseFloat(warmupS),
-      duration_s: Number.parseFloat(durationS),
-    };
-    if (cameraMode === "mock") body.mock_camera = true;
-    if (cameraMode === "real") body.mock_camera = false;
-    return body;
-  };
-
   const onSubmit = async (event) => {
     event.preventDefault();
     setSubmitting(true);
     setError("");
     setMessage("starting sweep...");
     try {
-      const payload = await window.Actions.startSweep(buildBody());
+      const body = window.Data.buildSweepBody({
+        selectedTransports, batchOff, batchOn, batchSizes, batchWaits,
+        inferSingle, inferUnsafe, inferMulti, inferInstances,
+        cameraMode, warmupS, durationS,
+      });
+      const payload = await window.Actions.startSweep(body);
       setMessage(`started ${payload.plan?.length || 0} runs`);
     } catch (e) {
       setError(e.message || String(e));

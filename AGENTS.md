@@ -23,9 +23,10 @@ pip install -e ".[dev,test]"  # pip fallback
 
 **Test:**
 ```bash
-pytest tests                        # all tests
+pytest tests                        # all Python tests
 pytest tests/test_http_multipart.py # single file
 pytest -q                           # quiet (used in CI)
+npm test                            # JS tests (vitest, tests/js/)
 ```
 
 ## Unit Tests

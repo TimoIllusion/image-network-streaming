@@ -10,6 +10,7 @@
 // visible until the heartbeat catches up.
 
 (function () {
+  const hasWindow = typeof window !== "undefined";
   const POLL_MS = 1000;
   const PENDING_TTL_MS = 5000;
   const SERIES_CAP = 60;
@@ -18,7 +19,7 @@
   const STAGE_KEYS = ["enc", "dec", "comms", "infer", "post", "wait"];
 
   const initial = {
-    serverHost: window.location.host,
+    serverHost: hasWindow ? window.location.host : "",
     bootAt: Date.now(),
     transports: [],
     activeTransport: null,
@@ -238,6 +239,37 @@
       running: !!status.running,
       raw: status,
     };
+  }
+
+  // Build the /multi-run/start request body from RunForm state.
+  // mock_camera is omitted when cameraMode is "current" (preserve per-client setting),
+  // true for "mock", false for "real".
+  function buildSweepBody(state) {
+    const parseList = (value, parser) => String(value)
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map(parser);
+    const batchModes = [];
+    if (state.batchOff) batchModes.push("off");
+    if (state.batchOn) batchModes.push("on");
+    const inferenceModes = [];
+    if (state.inferSingle) inferenceModes.push("single");
+    if (state.inferUnsafe) inferenceModes.push("unsafe-multi");
+    if (state.inferMulti) inferenceModes.push("multi-instance");
+    const body = {
+      transports: state.selectedTransports || [],
+      batch_modes: batchModes,
+      batch_sizes: parseList(state.batchSizes, (v) => Number.parseInt(v, 10)),
+      batch_waits_ms: parseList(state.batchWaits, Number.parseFloat),
+      inference_modes: inferenceModes,
+      inference_instances: parseList(state.inferInstances, (v) => Number.parseInt(v, 10)),
+      warmup_s: Number.parseFloat(state.warmupS),
+      duration_s: Number.parseFloat(state.durationS),
+    };
+    if (state.cameraMode === "mock") body.mock_camera = true;
+    if (state.cameraMode === "real") body.mock_camera = false;
+    return body;
   }
 
   // ── Polling ───────────────────────────────────────────────────────────
@@ -626,29 +658,46 @@
   }
 
   // ── Public surface ────────────────────────────────────────────────────
-  window.Data = {
-    Store,
-    start,
-    useClients,
-    useSweep,
-    useTransports,
-    useBatching,
-    useInference,
-    useHistory,
-    useMeta,
-  };
-  window.Actions = {
-    applyTransport,
-    applyBatching,
-    applyInference,
-    startSweep,
-    controlClient,
-    controlAll,
-    clearClient,
-    clearAll,
-    copyMd,
-    exportCsv,
-  };
+  if (hasWindow) {
+    window.Data = {
+      Store,
+      start,
+      useClients,
+      useSweep,
+      useTransports,
+      useBatching,
+      useInference,
+      useHistory,
+      useMeta,
+      buildSweepBody,
+    };
+    window.Actions = {
+      applyTransport,
+      applyBatching,
+      applyInference,
+      startSweep,
+      controlClient,
+      controlAll,
+      clearClient,
+      clearAll,
+      copyMd,
+      exportCsv,
+    };
+    start();
+  }
 
-  start();
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+      parseUiUrl,
+      parseMetric,
+      findCurrentRow,
+      rowToTiming,
+      buildClient,
+      buildAggregate,
+      weightedAverage,
+      aggregateRunClients,
+      adaptSweep,
+      buildSweepBody,
+    };
+  }
 })();
