@@ -191,6 +191,50 @@
     })).sort((a, b) => b.fps - a.fps);
   }
 
+  // Per-transport aggregation across every backend present in any client's bench_rows.
+  // Clients carry the full per-backend history each heartbeat (see client/state.py),
+  // so the head-to-head card stays populated across transport switches instead of
+  // collapsing to just the currently-active transport.
+  function aggregateClientsByTransport(rawClients) {
+    const byT = new Map();
+    for (const c of rawClients || []) {
+      const rows = (c.stats || {}).bench_rows || [];
+      for (const row of rows) {
+        const backend = row.Backend;
+        if (!backend) continue;
+        const item = byT.get(backend) || {
+          transport: backend,
+          clientNames: new Set(),
+          fps: 0,
+          stageSamples: { enc: [], dec: [], comms: [], infer: [], post: [], wait: [] },
+          totalSamples: [],
+        };
+        const frames = parseMetric(row.Frames);
+        item.clientNames.add(c.name);
+        item.fps += parseMetric(row.FPS);
+        for (const k of STAGE_KEYS) {
+          item.stageSamples[k].push({ value: parseMetric(row[`${k} (ms)`]), weight: frames });
+        }
+        item.totalSamples.push({ value: parseMetric(row["total (ms)"]), weight: frames });
+        byT.set(backend, item);
+      }
+    }
+    return [...byT.values()]
+      .map((item) => {
+        const timing = {};
+        for (const k of STAGE_KEYS) timing[k] = weightedAverage(item.stageSamples[k]);
+        return {
+          transport: item.transport,
+          count: item.clientNames.size,
+          fps: item.fps,
+          timing,
+          total: weightedAverage(item.totalSamples),
+        };
+      })
+      .filter((r) => r.total > 0)
+      .sort((a, b) => a.total - b.total);
+  }
+
   function adaptSweep(status) {
     if (!status) return { rows: [], completed: 0, total: 0, transports: [], running: false, raw: null };
     const plan = status.plan || [];
@@ -626,6 +670,11 @@
     return React.useMemo(() => adaptSweep(state.sweepStatus), [state.sweepStatus]);
   }
 
+  function useTransportComparison() {
+    const state = useStoreSnapshot();
+    return React.useMemo(() => aggregateClientsByTransport(state.rawClients), [state.rawClients]);
+  }
+
   function useTransports() {
     const state = useStoreSnapshot();
     return state.transports;
@@ -664,6 +713,7 @@
       start,
       useClients,
       useSweep,
+      useTransportComparison,
       useTransports,
       useBatching,
       useInference,
@@ -696,6 +746,7 @@
       buildAggregate,
       weightedAverage,
       aggregateRunClients,
+      aggregateClientsByTransport,
       adaptSweep,
       buildSweepBody,
     };

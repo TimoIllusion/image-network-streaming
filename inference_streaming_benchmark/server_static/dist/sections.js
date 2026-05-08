@@ -287,39 +287,13 @@ const Hero = ({
 };
 
 // ── Transport head-to-head comparison ──────────────────────────────────
+// Rows are sourced from window.Data.useTransportComparison(), which walks every
+// backend present in any client's bench_rows so the card retains historical
+// transports across switches instead of collapsing to the currently-active one.
 const TransportComparison = ({
-  clients
+  rows
 }) => {
-  const byT = {};
-  for (const c of clients) {
-    if (!c.inferenceOn || c.timing.total <= 0) continue;
-    if (!byT[c.transport]) byT[c.transport] = [];
-    byT[c.transport].push(c);
-  }
-  const rows = Object.entries(byT).map(([t, cs]) => {
-    const n = cs.length;
-    const timing = {
-      enc: 0,
-      dec: 0,
-      comms: 0,
-      infer: 0,
-      post: 0,
-      wait: 0
-    };
-    for (const c of cs) for (const k of STAGE_ORDER) timing[k] += c.timing[k];
-    for (const k of STAGE_ORDER) timing[k] /= n;
-    const total = STAGE_ORDER.reduce((a, k) => a + timing[k], 0);
-    const fps = cs.reduce((a, c) => a + c.fps, 0) / n;
-    return {
-      transport: t,
-      timing,
-      total,
-      fps,
-      count: n
-    };
-  });
-  rows.sort((a, b) => a.total - b.total);
-  if (!rows.length) return null;
+  if (!rows || !rows.length) return null;
   const maxTotal = Math.max(...rows.map(r => r.total)) || 1;
   const maxFps = Math.max(...rows.map(r => r.fps)) || 1;
   return /*#__PURE__*/React.createElement("div", {

@@ -29,6 +29,7 @@ const App = () => {
     aggregate
   } = window.Data.useClients();
   const sweep = window.Data.useSweep();
+  const transportComparison = window.Data.useTransportComparison();
   const transports = window.Data.useTransports();
   const batching = window.Data.useBatching();
   const inference = window.Data.useInference();
@@ -78,8 +79,8 @@ const App = () => {
       completed: sweep.completed,
       total: sweep.total
     }
-  }), clients.length > 0 && /*#__PURE__*/React.createElement(TransportComparison, {
-    clients: clients
+  }), transportComparison.length > 0 && /*#__PURE__*/React.createElement(TransportComparison, {
+    rows: transportComparison
   }), /*#__PURE__*/React.createElement(RunForm, {
     transports: transports,
     sweep: sweep

@@ -26,6 +26,7 @@ function applyTheme(theme) {
 const App = () => {
   const { clients, aggregate } = window.Data.useClients();
   const sweep = window.Data.useSweep();
+  const transportComparison = window.Data.useTransportComparison();
   const transports = window.Data.useTransports();
   const batching = window.Data.useBatching();
   const inference = window.Data.useInference();
@@ -72,7 +73,7 @@ const App = () => {
         sweepProgress={{ completed: sweep.completed, total: sweep.total }}
       />
 
-      {clients.length > 0 && <TransportComparison clients={clients} />}
+      {transportComparison.length > 0 && <TransportComparison rows={transportComparison} />}
 
       <RunForm transports={transports} sweep={sweep} />
 
