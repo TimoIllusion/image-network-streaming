@@ -1,6 +1,6 @@
 # inference-streaming-benchmark
 
-Comparison implementation for image transmission and inference response using an AI inference server with multiple communication systems: HTTP multipart (FastAPI), ZeroMQ (ZMQ), ImageZMQ, grpc.
+Benchmark implementation for image transmission and inference response latency using one AI inference server across multiple transport protocols: HTTP multipart (FastAPI), ZeroMQ (ZMQ), ImageZMQ, and gRPC.
 
 ![Central operator panel — live aggregate, latency breakdown, and transport head-to-head](docs/assets/ui-operator-overview.png)
 
@@ -47,7 +47,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,test]"
 ```
 
->Note: Install torch with the respective hardware acceleration, e.g. CUDA to increase inference speed.
+> Note: Install torch with the appropriate hardware acceleration backend, such as CUDA or MPS, to improve inference speed.
 
 ## Run
 
@@ -79,7 +79,7 @@ Options:
 | imagezmq       | 5556  | ImageZMQ + raw ndarray            |
 | grpc           | 50051 | gRPC unary + raw ndarray bytes    |
 
->Note: transfer speed for images can be significantly boosted by resizing them before sending. This will usually not cause issues with the ai model, since most models need images of low input sizes like 224x224.
+> Note: Image transfer speed can improve significantly if frames are resized before sending. This usually does not affect model quality when the model already expects smaller inputs, such as 224x224.
 
 ## Multi-device deployment
 
@@ -239,4 +239,4 @@ Open work is tracked with beads. Run `bd ready` to see available issues.
 
 ## AI Assistance
 
-Development of this project was supported by AI, which provided code suggestions and troubleshooting help.
+Development of this project was supported by AI agents (Claude, ChatGPT).
